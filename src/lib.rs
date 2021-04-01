@@ -1,11 +1,19 @@
+use std::fmt::{Debug, Display};
 use std::io::BufRead;
 use std::{io, process};
 
 use scanner::Scanner;
 
+pub mod ast_printer;
+pub mod expr;
+pub mod parser;
 pub mod peek2;
 pub mod scanner;
 pub mod token;
+
+pub trait LoxType: Debug + Display {}
+impl<T: Debug + Display> LoxType for T {}
+pub type LoxObject = Box<dyn LoxType>;
 
 #[derive(Debug, Default)]
 pub struct Rilox {
@@ -47,7 +55,7 @@ impl Rilox {
         let tokens = scanner.scan_tokens();
 
         for token in tokens {
-            dbg!(token);
+            eprintln!("{:?}", token);
         }
     }
 

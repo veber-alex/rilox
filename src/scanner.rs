@@ -1,7 +1,6 @@
 use crate::peek2::Peekable2;
 use crate::token::{Token, TokenType};
-use crate::Rilox;
-use std::fmt::Debug;
+use crate::{LoxType, Rilox};
 use std::str::CharIndices;
 
 pub struct Scanner<'a> {
@@ -240,7 +239,7 @@ impl<'a> Scanner<'a> {
 
     fn add_token_with_literal<T>(&mut self, ttype: TokenType, literal: T)
     where
-        T: Debug + 'static,
+        T: LoxType + 'static,
     {
         // FIXME: Remove to_string
         let text = self.source[self.start..self.current].to_string();
