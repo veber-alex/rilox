@@ -1,10 +1,7 @@
 use std::fmt::Debug;
 
-use crate::LoxObject;
-
 #[rustfmt::skip]
-#[derive(Debug, Clone, Copy)]
-// FIXME: Unleash the power of ADTs
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
   // Single-character tokens.
   LeftParen, RightParen, LeftBrace, RightBrace,
@@ -17,7 +14,7 @@ pub enum TokenType {
   Less, LessEqual,
 
   // Literals.
-  Identifier, String, Number,
+  Identifier, Str(String), Number(String),
 
   // Keywords.
   And, Class, Else, False, Fun, For, If, Nil, Or,
@@ -30,21 +27,31 @@ pub enum TokenType {
 pub struct Token {
     ttype: TokenType,
     lexeme: String,
-    literal: Option<LoxObject>,
     line: usize,
 }
 
 impl Token {
-    pub fn new(ttype: TokenType, lexeme: String, literal: Option<LoxObject>, line: usize) -> Self {
+    pub fn new(ttype: TokenType, lexeme: String, line: usize) -> Self {
         Self {
             ttype,
             lexeme,
-            literal,
             line,
         }
     }
 
     pub fn lexeme(&self) -> &str {
         &self.lexeme
+    }
+
+    pub fn ttype(&self) -> &TokenType {
+        &self.ttype
+    }
+
+    pub fn ttype_mut(&mut self) -> &mut TokenType {
+        &mut self.ttype
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
     }
 }

@@ -1,40 +1,40 @@
 use crate::peek2::Peekable2;
+use crate::report_error;
 use crate::token::{Token, TokenType};
-use crate::{LoxType, Rilox};
 use std::str::CharIndices;
 
 pub struct Scanner<'a> {
-    rilox: &'a mut Rilox,
     source: &'a str,
     source_iter: Peekable2<CharIndices<'a>>,
     tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
+    had_error: bool,
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str, rilox: &'a mut Rilox) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Self {
-            rilox,
             source,
             source_iter: Peekable2::new(source.char_indices()),
             tokens: vec![],
             start: 0,
             current: 0,
             line: 1,
+            had_error: false,
         }
     }
 
-    pub fn scan_tokens(mut self) -> Vec<Token> {
+    pub fn scan_tokens(mut self) -> (Vec<Token>, bool) {
         while self.source_iter.peek().is_some() {
             self.start = self.current;
-            self.scan_token();
+            self.scan_token()
         }
         self.tokens
-            .push(Token::new(TokenType::Eof, "".to_string(), None, self.line));
+            .push(Token::new(TokenType::Eof, "".to_string(), self.line));
 
-        self.tokens
+        (self.tokens, self.had_error)
     }
 
     fn scan_token(&mut self) {
@@ -95,7 +95,7 @@ impl<'a> Scanner<'a> {
                 'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
                 ' ' | '\r' | '\t' => (),
                 '\n' => self.line += 1,
-                _ => self.rilox.error(self.line, "Unexpected character."),
+                _ => self.error(self.line, "Unexpected character."),
             }
         }
     }
@@ -168,7 +168,7 @@ impl<'a> Scanner<'a> {
         }
 
         if self.peek().is_none() {
-            self.rilox.error(self.line, "Unterminated string.");
+            self.error(self.line, "Unterminated string.");
             return;
         }
 
@@ -177,7 +177,7 @@ impl<'a> Scanner<'a> {
 
         // FIXME: Remove to_string.
         let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token_with_literal(TokenType::String, value);
+        self.add_token(TokenType::Str(value));
     }
 
     fn number(&mut self) {
@@ -192,12 +192,8 @@ impl<'a> Scanner<'a> {
             self.advance_while(Self::is_digit);
         }
 
-        self.add_token_with_literal(
-            TokenType::Number,
-            self.source[self.start..self.current]
-                .parse::<f64>()
-                .unwrap(),
-        )
+        let value = self.source[self.start..self.current].to_string();
+        self.add_token(TokenType::Number(value))
     }
 
     fn keywords(&self, text: &str) -> TokenType {
@@ -234,16 +230,11 @@ impl<'a> Scanner<'a> {
     fn add_token(&mut self, ttype: TokenType) {
         // FIXME: Remove to_string
         let text = self.source[self.start..self.current].to_string();
-        self.tokens.push(Token::new(ttype, text, None, self.line))
+        self.tokens.push(Token::new(ttype, text, self.line))
     }
 
-    fn add_token_with_literal<T>(&mut self, ttype: TokenType, literal: T)
-    where
-        T: LoxType + 'static,
-    {
-        // FIXME: Remove to_string
-        let text = self.source[self.start..self.current].to_string();
-        self.tokens
-            .push(Token::new(ttype, text, Some(Box::new(literal)), self.line))
+    fn error(&mut self, line: usize, message: &str) {
+        self.had_error = true;
+        report_error(line, "", message);
     }
 }

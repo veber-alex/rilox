@@ -1,7 +1,10 @@
+use std::any::Any;
 use std::fmt::{Debug, Display};
 use std::io::BufRead;
 use std::{io, process};
 
+use ast_printer::AstPrinter;
+use parser::Parser;
 use scanner::Scanner;
 
 pub mod ast_printer;
@@ -11,8 +14,8 @@ pub mod peek2;
 pub mod scanner;
 pub mod token;
 
-pub trait LoxType: Debug + Display {}
-impl<T: Debug + Display> LoxType for T {}
+pub trait LoxType: Debug + Display + Any {}
+impl<T: Debug + Display + Any> LoxType for T {}
 pub type LoxObject = Box<dyn LoxType>;
 
 #[derive(Debug, Default)]
@@ -51,20 +54,26 @@ impl Rilox {
     }
 
     fn run(&mut self, source: &str) {
-        let scanner = Scanner::new(source, self);
-        let tokens = scanner.scan_tokens();
+        // Scanning
+        let scanner = Scanner::new(source);
+        let (tokens, had_scan_error) = scanner.scan_tokens();
 
-        for token in tokens {
-            eprintln!("{:?}", token);
+        // for token in &tokens {
+        //     eprintln!("{:?}", token);
+        // }
+
+        if had_scan_error {
+            return;
+        }
+
+        // Parsing
+        let mut parser = Parser::new(tokens);
+        if let Some(expression) = parser.parse() {
+            eprintln!("{}", AstPrinter.print(&expression));
         }
     }
+}
 
-    fn error(&mut self, line: usize, message: &str) {
-        self.report(line, "", message);
-    }
-
-    fn report(&mut self, line: usize, loc: &str, message: &str) {
-        eprintln!("[line {}] Error {}: {}", line, loc, message);
-        self.had_error = true;
-    }
+pub fn report_error(line: usize, loc: &str, message: &str) {
+    eprintln!("[line {}] Error{}: {}", line, loc, message);
 }

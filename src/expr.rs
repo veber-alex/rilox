@@ -1,5 +1,5 @@
 use crate::token::Token;
-use crate::LoxObject;
+use crate::{LoxObject, LoxType};
 use std::fmt::Debug;
 
 pub trait ExprVisitor {
@@ -32,9 +32,13 @@ impl Expr {
         Expr::Grouping(Box::new(GroupingExpr { expression }))
     }
 
-    // FIXME: Allow creating None literals while also passing LoxType not wrapped in Option<Box<T>>
-    pub fn literal(value: Option<LoxObject>) -> Expr {
-        Expr::Literal(LiteralExpr { value })
+    pub fn literal<T>(value: T) -> Expr
+    where
+        T: LoxType + 'static,
+    {
+        Expr::Literal(LiteralExpr {
+            value: Box::new(value),
+        })
     }
 
     pub fn unary(operator: Token, right: Expr) -> Expr {
@@ -65,7 +69,7 @@ pub struct GroupingExpr {
 
 #[derive(Debug)]
 pub struct LiteralExpr {
-    pub value: Option<LoxObject>,
+    pub value: LoxObject,
 }
 
 #[derive(Debug)]

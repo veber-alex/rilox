@@ -1,6 +1,6 @@
 use crate::expr::{BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr};
 
-struct AstPrinter;
+pub struct AstPrinter;
 
 impl AstPrinter {
     #[allow(dead_code)]
@@ -32,11 +32,7 @@ impl ExprVisitor for AstPrinter {
     }
 
     fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> Self::Output {
-        if let Some(literal) = &expr.value {
-            literal.to_string()
-        } else {
-            "nil".to_string()
-        }
+        expr.value.to_string()
     }
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
@@ -53,11 +49,11 @@ mod tests {
     fn pretty_print() {
         let expression = Expr::binary(
             Expr::unary(
-                Token::new(TokenType::Minus, "-".into(), None, 1),
-                Expr::literal(Some(Box::new(123))),
+                Token::new(TokenType::Minus, "-".into(), 1),
+                Expr::literal(Box::new(123)),
             ),
-            Token::new(TokenType::Star, "*".into(), None, 1),
-            Expr::grouping(Expr::literal(Some(Box::new(45.67)))),
+            Token::new(TokenType::Star, "*".into(), 1),
+            Expr::grouping(Expr::literal(Box::new(45.67))),
         );
 
         assert_eq!(AstPrinter.print(&expression), "(* (- 123) (group 45.67))");
