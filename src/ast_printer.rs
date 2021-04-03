@@ -36,6 +36,10 @@ impl ExprVisitor for AstPrinter {
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
         self.parenthesize(&expr.operator.lexeme(), &[&expr.right])
     }
+
+    fn visit_variable_expr(&mut self, expr: &crate::expr::VariableExpr) -> Self::Output {
+        todo!()
+    }
 }
 
 #[cfg(test)]

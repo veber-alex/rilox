@@ -3,20 +3,21 @@ use std::io::BufRead;
 
 use std::{io, process};
 
-use ast_printer::AstPrinter;
+// use ast_printer::AstPrinter;
 use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
 
-pub mod ast_printer;
-pub mod expr;
-pub mod interpreter;
-pub mod object;
-pub mod parser;
-pub mod peek2;
-pub mod scanner;
-pub mod stmt;
-pub mod token;
+mod ast_printer;
+mod enviroment;
+mod expr;
+mod interpreter;
+mod object;
+mod parser;
+mod peek2;
+mod scanner;
+mod stmt;
+mod token;
 
 #[derive(Debug, Default)]
 pub struct Rilox;
@@ -55,28 +56,19 @@ impl Rilox {
         let scanner = Scanner::new(source);
         let (tokens, had_scan_error) = scanner.scan_tokens();
 
-        // for token in &tokens {
-        //     eprintln!("{:?}", token);
-        // }
-
+        // FIXME: REMOVE THIS
         if had_scan_error {
             return Err(());
         }
 
         // Parsing
         let mut parser = Parser::new(tokens);
-        if let Some(expression) = parser.parse() {
-            eprintln!("{}", AstPrinter.print(&expression));
+        let statements = parser.parse().ok_or(())?;
+        // eprintln!("DEBUG: {}", AstPrinter.print(&statements));
 
-            // Interpreting
-            let mut interpreter = Interpreter::new();
-            if let Some(result) = interpreter.interpret(&expression) {
-                println!("{}", result);
-                return Ok(());
-            }
-        }
-
-        Err(())
+        // Interpreting
+        let mut interpreter = Interpreter::new();
+        interpreter.interpret(statements).ok_or(())
     }
 }
 

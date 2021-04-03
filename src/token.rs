@@ -25,8 +25,8 @@ pub enum TokenType {
 
 #[derive(Debug)]
 pub struct Token {
-    ttype: TokenType,
-    lexeme: String,
+    pub ttype: TokenType,
+    pub lexeme: String,
     line: usize,
 }
 
@@ -41,14 +41,6 @@ impl Token {
 
     pub fn lexeme(&self) -> &str {
         &self.lexeme
-    }
-
-    pub fn ttype(&self) -> &TokenType {
-        &self.ttype
-    }
-
-    pub fn ttype_mut(&mut self) -> &mut TokenType {
-        &mut self.ttype
     }
 
     pub fn line(&self) -> usize {

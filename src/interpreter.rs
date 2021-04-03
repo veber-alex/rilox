@@ -1,19 +1,33 @@
-use crate::expr::{BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr};
+use crate::enviroment::Enviroment;
+use crate::expr::{
+    BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr, VariableExpr,
+};
 use crate::object::{LoxBool, LoxNumber, LoxString};
 use crate::object::{LoxNil, LoxObject};
 use crate::report_error;
+use crate::stmt::{ExprStmt, PrintStmt, Stmt, StmtVisitor, VarStmt};
 use crate::token::TokenType::*;
 
 #[derive(Debug, Default)]
-pub struct Interpreter;
+pub struct Interpreter {
+    enviroment: Enviroment,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
         Default::default()
     }
 
-    pub fn interpret(&mut self, expr: &Expr) -> Option<LoxObject> {
-        self.evaluate(expr).ok()
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Option<()> {
+        for stmt in statements {
+            self.execute(stmt).ok()?;
+        }
+
+        Some(())
+    }
+
+    fn execute(&mut self, stmt: Stmt) -> Result<(), RuntimeError> {
+        stmt.accept(self)
     }
 
     fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, RuntimeError> {
@@ -49,7 +63,7 @@ impl ExprVisitor for Interpreter {
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
 
-        match expr.operator.ttype() {
+        match expr.operator.ttype {
             BangEqual => Ok(LoxBool::new(!Self::is_equal(&left, &right))),
             EqualEqual => Ok(LoxBool::new(Self::is_equal(&left, &right))),
             Minus | Slash | Star | Greater | GreaterEqual | Less | LessEqual => {
@@ -57,7 +71,7 @@ impl ExprVisitor for Interpreter {
                     left.as_any().downcast_ref::<LoxNumber>(),
                     right.as_any().downcast_ref::<LoxNumber>(),
                 ) {
-                    let ret = match expr.operator.ttype() {
+                    let ret = match expr.operator.ttype {
                         Minus => LoxNumber::new(lvalue.0 - rvalue.0),
                         Slash => LoxNumber::new(lvalue.0 / rvalue.0),
                         Star => LoxNumber::new(lvalue.0 * rvalue.0),
@@ -107,20 +121,50 @@ impl ExprVisitor for Interpreter {
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
         let right = self.evaluate(&expr.right)?;
-        match expr.operator.ttype() {
+        match expr.operator.ttype {
             Minus => {
                 if let Some(value) = right.as_any().downcast_ref::<LoxNumber>() {
                     Ok(LoxNumber::new(-value.0))
                 } else {
                     Err(Self::error(
                         expr.operator.line(),
-                        format!("Type {} Cannot be negated", right.type_as_str()),
+                        format!("type {} cannot be negated", right.type_as_str()),
                     ))
                 }
             }
             Bang => Ok(LoxBool::new(!Self::is_truthy(&right))),
             _ => unreachable!(),
         }
+    }
+
+    fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
+        todo!()
+    }
+}
+
+impl StmtVisitor for Interpreter {
+    type Output = Result<(), RuntimeError>;
+
+    fn visit_expr_stmt(&mut self, stmt: ExprStmt) -> Self::Output {
+        self.evaluate(&stmt.expression)?;
+        Ok(())
+    }
+
+    fn visit_print_stmt(&mut self, stmt: PrintStmt) -> Self::Output {
+        let value = self.evaluate(&stmt.expression)?;
+        println!("{}", value);
+        Ok(())
+    }
+
+    fn visit_var_stmt(&mut self, stmt: VarStmt) -> Self::Output {
+        let initializer = if let Some(expr) = stmt.initializer {
+            self.evaluate(&expr)?
+        } else {
+            LoxNil::new()
+        };
+
+        self.enviroment.define(stmt.name.lexeme, initializer);
+        Ok(())
     }
 }
 
@@ -131,7 +175,7 @@ pub struct RuntimeError {
 }
 
 impl RuntimeError {
-    fn new(line: usize, msg: String) -> Self {
+    pub fn new(line: usize, msg: String) -> Self {
         Self { line, msg }
     }
 }
