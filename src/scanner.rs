@@ -235,6 +235,6 @@ impl<'a> Scanner<'a> {
 
     fn error(&mut self, line: usize, message: &str) {
         self.had_error = true;
-        report_error(line, "", message);
+        report_error("Scan", line, "", message);
     }
 }

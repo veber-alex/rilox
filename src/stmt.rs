@@ -7,6 +7,7 @@ pub trait StmtVisitor {
     fn visit_expr_stmt(&mut self, stmt: ExprStmt) -> Self::Output;
     fn visit_print_stmt(&mut self, stmt: PrintStmt) -> Self::Output;
     fn visit_var_stmt(&mut self, stmt: VarStmt) -> Self::Output;
+    fn visit_block_stmt(&mut self, stmt: BlockStmt) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -14,6 +15,7 @@ pub enum Stmt {
     Expr(ExprStmt),
     Print(PrintStmt),
     Var(VarStmt),
+    Block(BlockStmt),
 }
 
 impl Stmt {
@@ -22,6 +24,7 @@ impl Stmt {
             Stmt::Expr(s) => visitor.visit_expr_stmt(s),
             Stmt::Print(s) => visitor.visit_print_stmt(s),
             Stmt::Var(s) => visitor.visit_var_stmt(s),
+            Stmt::Block(s) => visitor.visit_block_stmt(s),
         }
     }
 
@@ -35,6 +38,10 @@ impl Stmt {
 
     pub fn var(name: Token, initializer: Option<Expr>) -> Stmt {
         Stmt::Var(VarStmt { name, initializer })
+    }
+
+    pub fn block(statements: Vec<Stmt>) -> Stmt {
+        Stmt::Block(BlockStmt { statements })
     }
 }
 
@@ -52,4 +59,9 @@ pub struct PrintStmt {
 pub struct VarStmt {
     pub name: Token,
     pub initializer: Option<Expr>,
+}
+
+#[derive(Debug)]
+pub struct BlockStmt {
+    pub statements: Vec<Stmt>,
 }

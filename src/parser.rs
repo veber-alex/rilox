@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter::Peekable;
@@ -27,7 +28,7 @@ impl Parser {
         let mut statements = vec![];
 
         while !matches!(self.tokens.peek().map(|t| &t.ttype), None | Some(Eof)) {
-            let stmt = self.declaration().ok()?;
+            let stmt = self.declaration().map_err(|e| e.report()).ok()?;
             statements.push(stmt);
         }
 
@@ -58,15 +59,11 @@ impl Parser {
     fn statement(&mut self) -> Result<Stmt, ParserError> {
         if self.next_token_if(|t| matches!(t, Print)).is_some() {
             self.print_statement()
+        } else if self.next_token_if(|t| matches!(t, LeftBrace)).is_some() {
+            Ok(Stmt::block(self.block()?))
         } else {
             self.expression_statement()
         }
-    }
-
-    fn print_statement(&mut self) -> Result<Stmt, ParserError> {
-        let value = self.expression()?;
-        self.next_token_verify(&Semicolon, "Expect ';' after value.")?;
-        Ok(Stmt::print(value))
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -75,8 +72,49 @@ impl Parser {
         Ok(Stmt::expr(value))
     }
 
+    fn print_statement(&mut self) -> Result<Stmt, ParserError> {
+        let value = self.expression()?;
+        self.next_token_verify(&Semicolon, "Expect ';' after value.")?;
+        Ok(Stmt::print(value))
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>, ParserError> {
+        let mut statements = vec![];
+
+        while !matches!(
+            self.tokens.peek().map(|t| &t.ttype),
+            Some(Eof) | Some(RightBrace)
+        ) {
+            statements.push(self.declaration()?)
+        }
+        self.next_token_verify(&RightBrace, "Expect '}' after block.")?;
+
+        Ok(statements)
+    }
+
     fn expression(&mut self) -> Result<Expr, ParserError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParserError> {
+        // parse l-value expression
+        let expr = self.equality()?;
+
+        // Check for `=` token
+        if let Some(token) = self.next_token_if(|t| matches!(t, Equal)) {
+            // parse r-value expression
+            let value = self.assignment()?;
+            // verify l-value is a variable
+            if let Expr::Variable(var) = expr {
+                let name = var.name;
+                Ok(Expr::assign(name, value))
+            } else {
+                // TODO: Add flag to prevent SYNC and set it here
+                Err(Self::error(&token, "Invalid assignment target."))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self) -> Result<Expr, ParserError> {
@@ -158,13 +196,13 @@ impl Parser {
     fn next_token_verify(
         &mut self,
         ttype: &TokenType,
-        message: &str,
+        message: &'static str,
     ) -> Result<Token, ParserError> {
         if let Some(token) = self.next_token_if(|t| t == ttype) {
             Ok(token)
         } else {
             let token = self.tokens.peek().expect("Tokens ended without Eof Token");
-            Err(Self::error(&token, message))
+            Err(Self::error(token, message))
         }
     }
 
@@ -175,24 +213,33 @@ impl Parser {
         self.tokens.next_if(|t| predicate(&t.ttype))
     }
 
-    fn error(token: &Token, message: &str) -> ParserError {
+    fn error(token: &Token, message: &'static str) -> ParserError {
         if token.ttype == TokenType::Eof {
-            report_error(token.line(), " at end", message)
+            ParserError::new(token.line, " at end".into(), message.into())
         } else {
-            report_error(token.line(), &format!(" at '{}'", token.lexeme()), message)
+            ParserError::new(
+                token.line,
+                format!(" at '{}'", token.lexeme).into(),
+                message.into(),
+            )
         }
-
-        ParserError
     }
 }
 
 #[derive(Debug)]
-struct ParserError;
-
-impl Display for ParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Parser Error")
-    }
+struct ParserError {
+    line: usize,
+    loc: Cow<'static, str>,
+    msg: Cow<'static, str>,
 }
 
-impl Error for ParserError {}
+impl ParserError {
+    pub fn new(line: usize, loc: Cow<'static, str>, msg: Cow<'static, str>) -> Self {
+        Self { line, loc, msg }
+    }
+
+    pub fn report(self) -> Self {
+        report_error("Parse", self.line, &self.loc, &self.msg);
+        self
+    }
+}

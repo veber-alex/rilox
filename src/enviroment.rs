@@ -13,11 +13,24 @@ impl Enviroment {
         self.values.insert(name, value);
     }
 
-    pub fn get(&mut self, token: Token) -> Result<LoxObject, RuntimeError> {
-        self.values.get(token.lexeme()).cloned().ok_or_else(|| {
+    pub fn assign(&mut self, token: &Token, value: LoxObject) -> Result<(), RuntimeError> {
+        match self.values.get_mut(&token.lexeme) {
+            Some(old) => {
+                *old = value;
+                Ok(())
+            }
+            None => Err(RuntimeError::new(
+                token.line,
+                format!("Undefined variable '{}'.", token.lexeme),
+            )),
+        }
+    }
+
+    pub fn get(&mut self, token: &Token) -> Result<LoxObject, RuntimeError> {
+        self.values.get(&token.lexeme).cloned().ok_or_else(|| {
             RuntimeError::new(
-                token.line(),
-                format!("Undefined variable '{}'.", token.lexeme()),
+                token.line,
+                format!("Undefined variable '{}'.", token.lexeme),
             )
         })
     }

@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 #[rustfmt::skip]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TokenType {
   // Single-character tokens.
   LeftParen, RightParen, LeftBrace, RightBrace,
@@ -27,7 +27,7 @@ pub enum TokenType {
 pub struct Token {
     pub ttype: TokenType,
     pub lexeme: String,
-    line: usize,
+    pub line: usize,
 }
 
 impl Token {
@@ -37,13 +37,5 @@ impl Token {
             lexeme,
             line,
         }
-    }
-
-    pub fn lexeme(&self) -> &str {
-        &self.lexeme
-    }
-
-    pub fn line(&self) -> usize {
-        self.line
     }
 }

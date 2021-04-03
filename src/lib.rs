@@ -37,6 +37,7 @@ impl Rilox {
         Ok(())
     }
 
+    // TODO: Don't start new interpeter on each line
     pub fn run_prompt(&mut self) -> Result<(), io::Error> {
         let mut buffer = String::new();
         let stdin = io::stdin();
@@ -72,6 +73,6 @@ impl Rilox {
     }
 }
 
-pub fn report_error(line: usize, loc: &str, message: &str) {
-    eprintln!("[line {}] Error{}: {}", line, loc, message);
+pub fn report_error(etype: &str, line: usize, loc: &str, message: &str) {
+    eprintln!("[line {}] {} Error{}: {}", line, etype, loc, message);
 }

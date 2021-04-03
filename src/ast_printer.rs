@@ -1,14 +1,18 @@
-use crate::expr::{BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr};
+use std::array;
+
+use crate::expr::{
+    AssignExpr, BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr, VariableExpr,
+};
 pub struct AstPrinter;
 
 impl AstPrinter {
-    pub fn print(&mut self, expr: &Expr) -> String {
+    pub fn print(&mut self, expr: Expr) -> String {
         expr.accept(self)
     }
 
-    fn parenthesize(&mut self, name: &str, exprs: &[&Expr]) -> String {
+    fn parenthesize<const N: usize>(&mut self, name: &str, exprs: [Expr; N]) -> String {
         let mut output = format!("({}", name);
-        for expr in exprs {
+        for expr in array::IntoIter::new(exprs) {
             output.push(' ');
             output.push_str(&expr.accept(self));
         }
@@ -21,23 +25,27 @@ impl AstPrinter {
 impl ExprVisitor for AstPrinter {
     type Output = String;
 
-    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
-        self.parenthesize(&expr.operator.lexeme(), &[&expr.left, &expr.right])
+    fn visit_binary_expr(&mut self, expr: BinaryExpr) -> Self::Output {
+        self.parenthesize(&expr.operator.lexeme, [expr.left, expr.right])
     }
 
-    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Self::Output {
-        self.parenthesize("group", &[&expr.expression])
+    fn visit_grouping_expr(&mut self, expr: GroupingExpr) -> Self::Output {
+        self.parenthesize("group", [expr.expression])
     }
 
-    fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> Self::Output {
+    fn visit_literal_expr(&mut self, expr: LiteralExpr) -> Self::Output {
         expr.value.to_string()
     }
 
-    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
-        self.parenthesize(&expr.operator.lexeme(), &[&expr.right])
+    fn visit_unary_expr(&mut self, expr: UnaryExpr) -> Self::Output {
+        self.parenthesize(&expr.operator.lexeme, [expr.right])
     }
 
-    fn visit_variable_expr(&mut self, expr: &crate::expr::VariableExpr) -> Self::Output {
+    fn visit_variable_expr(&mut self, expr: VariableExpr) -> Self::Output {
+        todo!()
+    }
+
+    fn visit_assign_expr(&mut self, expr: AssignExpr) -> Self::Output {
         todo!()
     }
 }
@@ -59,6 +67,6 @@ mod tests {
             Expr::grouping(Expr::literal(LoxNumber::new(45.2))),
         );
 
-        assert_eq!(AstPrinter.print(&expression), "(* (- 123) (group 45.2))");
+        assert_eq!(AstPrinter.print(expression), "(* (- 123) (group 45.2))");
     }
 }
