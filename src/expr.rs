@@ -1,5 +1,5 @@
+use crate::object::LoxObject;
 use crate::token::Token;
-use crate::{LoxObject, LoxType};
 use std::fmt::Debug;
 
 pub trait ExprVisitor {
@@ -32,20 +32,15 @@ impl Expr {
         Expr::Grouping(Box::new(GroupingExpr { expression }))
     }
 
-    pub fn literal<T>(value: T) -> Expr
-    where
-        T: LoxType + 'static,
-    {
-        Expr::Literal(LiteralExpr {
-            value: Box::new(value),
-        })
+    pub fn literal(value: LoxObject) -> Expr {
+        Expr::Literal(LiteralExpr { value })
     }
 
     pub fn unary(operator: Token, right: Expr) -> Expr {
         Expr::Unary(Box::new(UnaryExpr { operator, right }))
     }
 
-    pub fn visit<V: ExprVisitor>(&self, visitor: &mut V) -> V::Output {
+    pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Output {
         match self {
             Expr::Binary(e) => visitor.visit_binary_expr(e),
             Expr::Grouping(e) => visitor.visit_grouping_expr(e),

@@ -11,10 +11,8 @@ fn main() -> Result<(), io::Error> {
     let mut rilox = Rilox::new();
 
     if let Some(path) = args.next() {
-        rilox.run_file(&path)?;
+        rilox.run_file(&path)
     } else {
-        rilox.run_prompt()?;
+        rilox.run_prompt()
     }
-
-    Ok(())
 }

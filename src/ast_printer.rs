@@ -1,18 +1,16 @@
 use crate::expr::{BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr};
-
 pub struct AstPrinter;
 
 impl AstPrinter {
-    #[allow(dead_code)]
     pub fn print(&mut self, expr: &Expr) -> String {
-        expr.visit(self)
+        expr.accept(self)
     }
 
     fn parenthesize(&mut self, name: &str, exprs: &[&Expr]) -> String {
         let mut output = format!("({}", name);
         for expr in exprs {
             output.push(' ');
-            output.push_str(&expr.visit(self));
+            output.push_str(&expr.accept(self));
         }
         output.push(')');
 
@@ -43,6 +41,7 @@ impl ExprVisitor for AstPrinter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::object::LoxNumber;
     use crate::token::{Token, TokenType};
 
     #[test]
@@ -50,12 +49,12 @@ mod tests {
         let expression = Expr::binary(
             Expr::unary(
                 Token::new(TokenType::Minus, "-".into(), 1),
-                Expr::literal(Box::new(123)),
+                Expr::literal(LoxNumber::new(123.)),
             ),
             Token::new(TokenType::Star, "*".into(), 1),
-            Expr::grouping(Expr::literal(Box::new(45.67))),
+            Expr::grouping(Expr::literal(LoxNumber::new(45.2))),
         );
 
-        assert_eq!(AstPrinter.print(&expression), "(* (- 123) (group 45.67))");
+        assert_eq!(AstPrinter.print(&expression), "(* (- 123) (group 45.2))");
     }
 }

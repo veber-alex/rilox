@@ -5,6 +5,7 @@ use std::mem;
 use std::vec::IntoIter;
 
 use crate::expr::Expr;
+use crate::object::{LoxBool, LoxNil, LoxNumber, LoxString};
 use crate::report_error;
 use crate::token::{Token, TokenType};
 
@@ -91,15 +92,13 @@ impl Parser {
         let mut token = self.tokens.next().expect("Tokens ended without Eof Token");
 
         let expr = match token.ttype_mut() {
-            False => Expr::literal(false),
-            True => Expr::literal(true),
-            Nil => Expr::literal("nil"),
-            Number(s) => Expr::literal(
-                mem::take(s)
-                    .parse::<f64>()
-                    .expect("Incorrect Token for f64"),
-            ),
-            Str(s) => Expr::literal(mem::take(s)),
+            False => Expr::literal(LoxBool::new(false)),
+            True => Expr::literal(LoxBool::new(true)),
+            Nil => Expr::literal(LoxNil::new()),
+            Number(s) => Expr::literal(LoxNumber::new(
+                mem::take(s).parse().expect("Incorrect Token for f64"),
+            )),
+            Str(s) => Expr::literal(LoxString::new(mem::take(s))),
             LeftParen => {
                 let expr = self.expression()?;
                 self.verify_next_token(&RightParen, "Expect ')' after expression.")?;

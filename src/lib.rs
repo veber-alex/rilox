@@ -1,27 +1,25 @@
-use std::any::Any;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::io::BufRead;
+
 use std::{io, process};
 
 use ast_printer::AstPrinter;
+use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
 
 pub mod ast_printer;
 pub mod expr;
+pub mod interpreter;
+pub mod object;
 pub mod parser;
 pub mod peek2;
 pub mod scanner;
+pub mod stmt;
 pub mod token;
 
-pub trait LoxType: Debug + Display + Any {}
-impl<T: Debug + Display + Any> LoxType for T {}
-pub type LoxObject = Box<dyn LoxType>;
-
 #[derive(Debug, Default)]
-pub struct Rilox {
-    had_error: bool,
-}
+pub struct Rilox;
 
 impl Rilox {
     pub fn new() -> Self {
@@ -30,9 +28,8 @@ impl Rilox {
 
     pub fn run_file(&mut self, path: &str) -> Result<(), io::Error> {
         let source = std::fs::read_to_string(path)?;
-        self.run(&source);
 
-        if self.had_error {
+        if self.run(&source).is_err() {
             process::exit(65)
         }
 
@@ -45,15 +42,15 @@ impl Rilox {
         let mut handle = stdin.lock();
 
         while handle.read_line(&mut buffer)? != 0 {
-            self.run(buffer.trim());
-            self.had_error = false;
+            // Ignore errors in REPL
+            let _ = self.run(buffer.trim());
             buffer.clear();
         }
 
         Ok(())
     }
 
-    fn run(&mut self, source: &str) {
+    fn run(&mut self, source: &str) -> Result<(), ()> {
         // Scanning
         let scanner = Scanner::new(source);
         let (tokens, had_scan_error) = scanner.scan_tokens();
@@ -63,14 +60,23 @@ impl Rilox {
         // }
 
         if had_scan_error {
-            return;
+            return Err(());
         }
 
         // Parsing
         let mut parser = Parser::new(tokens);
         if let Some(expression) = parser.parse() {
             eprintln!("{}", AstPrinter.print(&expression));
+
+            // Interpreting
+            let mut interpreter = Interpreter::new();
+            if let Some(result) = interpreter.interpret(&expression) {
+                println!("{}", result);
+                return Ok(());
+            }
         }
+
+        Err(())
     }
 }
 
