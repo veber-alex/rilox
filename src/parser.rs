@@ -1,6 +1,4 @@
 use std::borrow::Cow;
-use std::error::Error;
-use std::fmt::Display;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
@@ -46,30 +44,50 @@ impl Parser {
 
     fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
         let name = self.next_token_verify(&Identifier, "Expect variable name.")?;
-        let initializer = if self.next_token_if(|t| matches!(t, Equal)).is_some() {
-            Some(self.expression()?)
-        } else {
-            None
-        };
+        let initializer = self
+            .next_token_if(|t| matches!(t, Equal))
+            .map(|_| self.expression())
+            .transpose()?;
+
         self.next_token_verify(&Semicolon, "Expect ';' after variable declaration.")?;
 
         Ok(Stmt::var(name, initializer))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParserError> {
-        if self.next_token_if(|t| matches!(t, Print)).is_some() {
-            self.print_statement()
-        } else if self.next_token_if(|t| matches!(t, LeftBrace)).is_some() {
-            Ok(Stmt::block(self.block()?))
-        } else {
-            self.expression_statement()
+        if self.next_token_if(|t| matches!(t, If)).is_some() {
+            return self.if_statement();
         }
+
+        if self.next_token_if(|t| matches!(t, Print)).is_some() {
+            return self.print_statement();
+        }
+
+        if self.next_token_if(|t| matches!(t, LeftBrace)).is_some() {
+            return Ok(Stmt::block(self.block()?));
+        }
+
+        self.expression_statement()
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
         self.next_token_verify(&Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::expr(value))
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, ParserError> {
+        self.next_token_verify(&LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.next_token_verify(&RightParen, "Expect ')' after if condition.")?;
+
+        let then_branch = self.statement()?;
+        let else_branch = self
+            .next_token_if(|t| matches!(t, Else))
+            .map(|_| self.statement())
+            .transpose()?;
+
+        Ok(Stmt::if_else(condition, then_branch, else_branch))
     }
 
     fn print_statement(&mut self) -> Result<Stmt, ParserError> {

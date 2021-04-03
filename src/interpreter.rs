@@ -1,16 +1,16 @@
-use crate::enviroment::Enviroment;
+use crate::enviroment::EnviromentStack;
 use crate::expr::{
     AssignExpr, BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr, VariableExpr,
 };
 use crate::object::{LoxBool, LoxNumber, LoxString};
 use crate::object::{LoxNil, LoxObject};
 use crate::report_error;
-use crate::stmt::{BlockStmt, ExprStmt, PrintStmt, Stmt, StmtVisitor, VarStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, StmtVisitor, VarStmt};
 use crate::token::TokenType::*;
 
 #[derive(Debug, Default)]
 pub struct Interpreter {
-    enviroment: Enviroment,
+    env_stack: EnviromentStack,
 }
 
 impl Interpreter {
@@ -28,6 +28,16 @@ impl Interpreter {
 
     fn execute(&mut self, stmt: Stmt) -> Result<(), RuntimeError> {
         stmt.accept(self)
+    }
+
+    fn execute_block(&mut self, statements: BlockStmt) -> Result<(), RuntimeError> {
+        self.env_stack.push();
+        for stmt in statements.statements {
+            self.execute(stmt)?;
+        }
+        self.env_stack.pop();
+
+        Ok(())
     }
 
     fn evaluate(&mut self, expr: Expr) -> Result<LoxObject, RuntimeError> {
@@ -133,12 +143,12 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, expr: VariableExpr) -> Self::Output {
-        self.enviroment.get(&expr.name)
+        self.env_stack.get(&expr.name)
     }
 
     fn visit_assign_expr(&mut self, expr: AssignExpr) -> Self::Output {
         let value = self.evaluate(expr.value)?;
-        self.enviroment.assign(&expr.name, value.clone())?;
+        self.env_stack.assign(&expr.name, value.clone())?;
         Ok(value)
     }
 }
@@ -164,12 +174,23 @@ impl StmtVisitor for Interpreter {
             LoxNil::new()
         };
 
-        self.enviroment.define(stmt.name.lexeme, initializer);
+        self.env_stack.define(stmt.name.lexeme, initializer);
         Ok(())
     }
 
     fn visit_block_stmt(&mut self, stmt: BlockStmt) -> Self::Output {
-        todo!()
+        self.execute_block(stmt)
+    }
+
+    fn visit_if_stmt(&mut self, stmt: IfStmt) -> Self::Output {
+        let condition = self.evaluate(stmt.condition)?;
+        if Self::is_truthy(&condition) {
+            self.execute(stmt.then_branch)?;
+        } else if let Some(else_branch) = stmt.else_branch {
+            self.execute(else_branch)?;
+        }
+
+        Ok(())
     }
 }
 
