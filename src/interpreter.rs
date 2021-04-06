@@ -2,8 +2,7 @@ use crate::enviroment::EnviromentStack;
 use crate::expr::{
     AssignExpr, BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr, VariableExpr,
 };
-use crate::object::{LoxBool, LoxNumber, LoxString};
-use crate::object::{LoxNil, LoxObject};
+use crate::object::LoxObject;
 use crate::report_error;
 use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, StmtVisitor, VarStmt};
 use crate::token::TokenType::*;
@@ -45,19 +44,11 @@ impl Interpreter {
     }
 
     fn is_truthy(object: &LoxObject) -> bool {
-        if object.as_any().downcast_ref::<LoxNil>().is_some() {
-            return false;
+        match object {
+            LoxObject::Nil => false,
+            LoxObject::Bool(b) => b.0,
+            _ => true,
         }
-
-        if let Some(value) = object.as_any().downcast_ref::<LoxBool>() {
-            return value.0;
-        }
-
-        true
-    }
-
-    fn is_equal(left: &LoxObject, right: &LoxObject) -> bool {
-        left.hash() == right.hash()
     }
 }
 
@@ -69,24 +60,20 @@ impl ExprVisitor for Interpreter {
         let right = self.evaluate(&expr.right)?;
 
         match expr.operator.ttype {
-            BangEqual => Ok(LoxBool::new(!Self::is_equal(&left, &right))),
-            EqualEqual => Ok(LoxBool::new(Self::is_equal(&left, &right))),
+            BangEqual => Ok(LoxObject::bool(left != right)),
+            EqualEqual => Ok(LoxObject::bool(left == right)),
             Minus | Slash | Star | Greater | GreaterEqual | Less | LessEqual => {
-                if let (Some(lvalue), Some(rvalue)) = (
-                    left.as_any().downcast_ref::<LoxNumber>(),
-                    right.as_any().downcast_ref::<LoxNumber>(),
-                ) {
-                    let ret = match expr.operator.ttype {
-                        Minus => LoxNumber::new(lvalue.0 - rvalue.0),
-                        Slash => LoxNumber::new(lvalue.0 / rvalue.0),
-                        Star => LoxNumber::new(lvalue.0 * rvalue.0),
-                        Greater => LoxBool::new(lvalue.0 > rvalue.0),
-                        GreaterEqual => LoxBool::new(lvalue.0 >= rvalue.0),
-                        Less => LoxBool::new(lvalue.0 < rvalue.0),
-                        LessEqual => LoxBool::new(lvalue.0 <= rvalue.0),
+                if let (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) = (left, right) {
+                    Ok(match expr.operator.ttype {
+                        Minus => LoxObject::number(lvalue.0 - rvalue.0),
+                        Slash => LoxObject::number(lvalue.0 / rvalue.0),
+                        Star => LoxObject::number(lvalue.0 * rvalue.0),
+                        Greater => LoxObject::bool(lvalue.0 > rvalue.0),
+                        GreaterEqual => LoxObject::bool(lvalue.0 >= rvalue.0),
+                        Less => LoxObject::bool(lvalue.0 < rvalue.0),
+                        LessEqual => LoxObject::bool(lvalue.0 <= rvalue.0),
                         _ => unreachable!(),
-                    };
-                    Ok(ret)
+                    })
                 } else {
                     Err(RuntimeError::new(
                         expr.operator.line,
@@ -94,24 +81,18 @@ impl ExprVisitor for Interpreter {
                     ))
                 }
             }
-            Plus => {
-                if let (Some(lvalue), Some(rvalue)) = (
-                    left.as_any().downcast_ref::<LoxNumber>(),
-                    right.as_any().downcast_ref::<LoxNumber>(),
-                ) {
-                    Ok(LoxNumber::new(lvalue.0 + rvalue.0))
-                } else if let (Some(lvalue), Some(rvalue)) = (
-                    left.as_any().downcast_ref::<LoxString>(),
-                    right.as_any().downcast_ref::<LoxString>(),
-                ) {
-                    Ok(LoxString::new(lvalue.0.clone() + &rvalue.0))
-                } else {
-                    Err(RuntimeError::new(
-                        expr.operator.line,
-                        "Operands must be two numbers or two strings.".into(),
-                    ))
+            Plus => match (left, right) {
+                (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) => {
+                    Ok(LoxObject::number(lvalue.0 + rvalue.0))
                 }
-            }
+                (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
+                    Ok(LoxObject::string(lvalue.0.as_ref().to_owned() + &rvalue.0))
+                }
+                _ => Err(RuntimeError::new(
+                    expr.operator.line,
+                    "Operands must be two numbers or two strings.".into(),
+                )),
+            },
             _ => unreachable!(),
         }
     }
@@ -128,8 +109,8 @@ impl ExprVisitor for Interpreter {
         let right = self.evaluate(&expr.right)?;
         match expr.operator.ttype {
             Minus => {
-                if let Some(value) = right.as_any().downcast_ref::<LoxNumber>() {
-                    Ok(LoxNumber::new(-value.0))
+                if let LoxObject::Number(value) = right {
+                    Ok(LoxObject::number(-value.0))
                 } else {
                     Err(RuntimeError::new(
                         expr.operator.line,
@@ -137,7 +118,7 @@ impl ExprVisitor for Interpreter {
                     ))
                 }
             }
-            Bang => Ok(LoxBool::new(!Self::is_truthy(&right))),
+            Bang => Ok(LoxObject::bool(!Self::is_truthy(&right))),
             _ => unreachable!(),
         }
     }
@@ -171,7 +152,7 @@ impl StmtVisitor for Interpreter {
         let initializer = if let Some(expr) = &stmt.initializer {
             self.evaluate(expr)?
         } else {
-            LoxNil::new()
+            LoxObject::nil()
         };
 
         // FIXME: Remove this clone

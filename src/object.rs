@@ -1,29 +1,55 @@
-#![allow(clippy::new_ret_no_self)]
-
-use std::any::Any;
-// FIXME: Use a faster hasher
-use std::collections::hash_map::DefaultHasher;
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, Hasher};
+use std::fmt::Display;
 use std::rc::Rc;
 
-pub trait LoxType: Debug + Display + Any {
-    fn as_any(&self) -> &dyn Any;
-    fn hash(&self) -> u64;
-    fn type_as_str(&self) -> &'static str;
+#[derive(Debug, PartialEq, Clone)]
+pub enum LoxObject {
+    Number(LoxNumber),
+    Nil,
+    Bool(LoxBool),
+    String(LoxString),
 }
 
-pub type LoxObject = Rc<dyn LoxType>;
+impl LoxObject {
+    pub fn number(value: f64) -> LoxObject {
+        Self::Number(LoxNumber(value))
+    }
 
-// Number
-#[derive(Debug)]
-pub struct LoxNumber(pub f64);
+    pub fn nil() -> LoxObject {
+        Self::Nil
+    }
 
-impl LoxNumber {
-    pub fn new(value: f64) -> LoxObject {
-        Rc::new(Self(value))
+    pub fn bool(value: bool) -> LoxObject {
+        Self::Bool(LoxBool(value))
+    }
+
+    pub fn string(value: String) -> LoxObject {
+        Self::String(LoxString(Rc::from(value)))
+    }
+
+    pub fn type_as_str(&self) -> &'static str {
+        match self {
+            LoxObject::Number(_) => "Number",
+            LoxObject::Nil => "Nil",
+            LoxObject::Bool(_) => "Bool",
+            LoxObject::String(_) => "String",
+        }
     }
 }
+
+impl Display for LoxObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoxObject::Number(v) => v.fmt(f),
+            LoxObject::Nil => f.write_str("Nil"),
+            LoxObject::Bool(v) => v.fmt(f),
+            LoxObject::String(v) => v.fmt(f),
+        }
+    }
+}
+
+// Number
+#[derive(Debug, PartialEq, Clone)]
+pub struct LoxNumber(pub f64);
 
 impl Display for LoxNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,63 +57,9 @@ impl Display for LoxNumber {
     }
 }
 
-impl LoxType for LoxNumber {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.0.to_ne_bytes().hash(&mut hasher);
-        hasher.finish()
-    }
-
-    fn type_as_str(&self) -> &'static str {
-        "Number"
-    }
-}
-
-// Nil
-#[derive(Debug)]
-pub struct LoxNil;
-
-impl LoxNil {
-    pub fn new() -> LoxObject {
-        Rc::new(LoxNil)
-    }
-}
-
-impl Display for LoxNil {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt("Nil", f)
-    }
-}
-
-impl LoxType for LoxNil {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        ().hash(&mut hasher);
-        hasher.finish()
-    }
-
-    fn type_as_str(&self) -> &'static str {
-        "Nil"
-    }
-}
-
 // False + True
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LoxBool(pub bool);
-
-impl LoxBool {
-    pub fn new(value: bool) -> LoxObject {
-        Rc::new(LoxBool(value))
-    }
-}
 
 impl Display for LoxBool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -95,51 +67,12 @@ impl Display for LoxBool {
     }
 }
 
-impl LoxType for LoxBool {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.0.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    fn type_as_str(&self) -> &'static str {
-        "Bool"
-    }
-}
-
 // String
-#[derive(Debug)]
-// FIXME: Box<str> ?
-pub struct LoxString(pub String);
-
-impl LoxString {
-    pub fn new(value: String) -> LoxObject {
-        Rc::new(LoxString(value))
-    }
-}
+#[derive(Debug, PartialEq, Clone)]
+pub struct LoxString(pub Rc<str>);
 
 impl Display for LoxString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
-    }
-}
-
-impl LoxType for LoxString {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.0.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    fn type_as_str(&self) -> &'static str {
-        "String"
     }
 }

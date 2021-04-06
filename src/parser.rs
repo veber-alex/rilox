@@ -1,12 +1,11 @@
-use std::borrow::Cow;
-use std::iter::Peekable;
-use std::vec::IntoIter;
-
 use crate::expr::Expr;
-use crate::object::{LoxBool, LoxNil, LoxNumber, LoxString};
+use crate::object::LoxObject;
 use crate::report_error;
 use crate::stmt::Stmt;
 use crate::token::{Token, TokenType};
+use std::borrow::Cow;
+use std::iter::Peekable;
+use std::vec::IntoIter;
 
 use TokenType::*;
 
@@ -191,11 +190,13 @@ impl Parser {
         let token = self.tokens.next().expect("Tokens ended without Eof Token");
 
         let expr = match token.ttype {
-            False => Expr::literal(LoxBool::new(false)),
-            True => Expr::literal(LoxBool::new(true)),
-            Nil => Expr::literal(LoxNil::new()),
-            Number(s) => Expr::literal(LoxNumber::new(s.parse().expect("Incorrect Token for f64"))),
-            Str(s) => Expr::literal(LoxString::new(s)),
+            False => Expr::literal(LoxObject::bool(false)),
+            True => Expr::literal(LoxObject::bool(true)),
+            Nil => Expr::literal(LoxObject::nil()),
+            Number(s) => Expr::literal(LoxObject::number(
+                s.parse().expect("Incorrect Token for f64"),
+            )),
+            Str(s) => Expr::literal(LoxObject::string(s)),
             Identifier => Expr::variable(token),
             LeftParen => {
                 let expr = self.expression()?;
