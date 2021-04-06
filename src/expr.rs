@@ -5,12 +5,12 @@ use std::fmt::Debug;
 pub trait ExprVisitor {
     type Output;
 
-    fn visit_binary_expr(&mut self, expr: BinaryExpr) -> Self::Output;
-    fn visit_grouping_expr(&mut self, expr: GroupingExpr) -> Self::Output;
-    fn visit_literal_expr(&mut self, expr: LiteralExpr) -> Self::Output;
-    fn visit_unary_expr(&mut self, expr: UnaryExpr) -> Self::Output;
-    fn visit_variable_expr(&mut self, expr: VariableExpr) -> Self::Output;
-    fn visit_assign_expr(&mut self, expr: AssignExpr) -> Self::Output;
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output;
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Self::Output;
+    fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> Self::Output;
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output;
+    fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output;
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -91,7 +91,7 @@ impl Expr {
         Expr::Assign(Box::new(UnboxedAssignExpr { name, value }))
     }
 
-    pub fn accept<V: ExprVisitor>(self, visitor: &mut V) -> V::Output {
+    pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Output {
         match self {
             Expr::Binary(e) => visitor.visit_binary_expr(e),
             Expr::Grouping(e) => visitor.visit_grouping_expr(e),

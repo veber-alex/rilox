@@ -18,7 +18,7 @@ impl Interpreter {
         Default::default()
     }
 
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Option<()> {
+    pub fn interpret(&mut self, statements: &[Stmt]) -> Option<()> {
         for stmt in statements {
             self.execute(stmt).map_err(|e| e.report()).ok()?;
         }
@@ -26,13 +26,13 @@ impl Interpreter {
         Some(())
     }
 
-    fn execute(&mut self, stmt: Stmt) -> Result<(), RuntimeError> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, statements: BlockStmt) -> Result<(), RuntimeError> {
+    fn execute_block(&mut self, statements: &BlockStmt) -> Result<(), RuntimeError> {
         self.env_stack.push();
-        for stmt in statements.statements {
+        for stmt in &statements.statements {
             self.execute(stmt)?;
         }
         self.env_stack.pop();
@@ -40,7 +40,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&mut self, expr: Expr) -> Result<LoxObject, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, RuntimeError> {
         expr.accept(self)
     }
 
@@ -64,9 +64,9 @@ impl Interpreter {
 impl ExprVisitor for Interpreter {
     type Output = Result<LoxObject, RuntimeError>;
 
-    fn visit_binary_expr(&mut self, expr: BinaryExpr) -> Self::Output {
-        let left = self.evaluate(expr.left)?;
-        let right = self.evaluate(expr.right)?;
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
+        let left = self.evaluate(&expr.left)?;
+        let right = self.evaluate(&expr.right)?;
 
         match expr.operator.ttype {
             BangEqual => Ok(LoxBool::new(!Self::is_equal(&left, &right))),
@@ -116,16 +116,16 @@ impl ExprVisitor for Interpreter {
         }
     }
 
-    fn visit_grouping_expr(&mut self, expr: GroupingExpr) -> Self::Output {
-        self.evaluate(expr.expression)
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Self::Output {
+        self.evaluate(&expr.expression)
     }
 
-    fn visit_literal_expr(&mut self, expr: LiteralExpr) -> Self::Output {
+    fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> Self::Output {
         Ok(expr.value.clone())
     }
 
-    fn visit_unary_expr(&mut self, expr: UnaryExpr) -> Self::Output {
-        let right = self.evaluate(expr.right)?;
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
+        let right = self.evaluate(&expr.right)?;
         match expr.operator.ttype {
             Minus => {
                 if let Some(value) = right.as_any().downcast_ref::<LoxNumber>() {
@@ -142,12 +142,12 @@ impl ExprVisitor for Interpreter {
         }
     }
 
-    fn visit_variable_expr(&mut self, expr: VariableExpr) -> Self::Output {
+    fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
         self.env_stack.get(&expr.name)
     }
 
-    fn visit_assign_expr(&mut self, expr: AssignExpr) -> Self::Output {
-        let value = self.evaluate(expr.value)?;
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
+        let value = self.evaluate(&expr.value)?;
         self.env_stack.assign(&expr.name, value.clone())?;
         Ok(value)
     }
@@ -156,37 +156,38 @@ impl ExprVisitor for Interpreter {
 impl StmtVisitor for Interpreter {
     type Output = Result<(), RuntimeError>;
 
-    fn visit_expr_stmt(&mut self, stmt: ExprStmt) -> Self::Output {
-        self.evaluate(stmt.expression)?;
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {
+        self.evaluate(&stmt.expression)?;
         Ok(())
     }
 
-    fn visit_print_stmt(&mut self, stmt: PrintStmt) -> Self::Output {
-        let value = self.evaluate(stmt.expression)?;
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Output {
+        let value = self.evaluate(&stmt.expression)?;
         println!("{}", value);
         Ok(())
     }
 
-    fn visit_var_stmt(&mut self, stmt: VarStmt) -> Self::Output {
-        let initializer = if let Some(expr) = stmt.initializer {
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Self::Output {
+        let initializer = if let Some(expr) = &stmt.initializer {
             self.evaluate(expr)?
         } else {
             LoxNil::new()
         };
 
-        self.env_stack.define(stmt.name.lexeme, initializer);
+        // FIXME: Remove this clone
+        self.env_stack.define(stmt.name.lexeme.clone(), initializer);
         Ok(())
     }
 
-    fn visit_block_stmt(&mut self, stmt: BlockStmt) -> Self::Output {
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output {
         self.execute_block(stmt)
     }
 
-    fn visit_if_stmt(&mut self, stmt: IfStmt) -> Self::Output {
-        let condition = self.evaluate(stmt.condition)?;
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output {
+        let condition = self.evaluate(&stmt.condition)?;
         if Self::is_truthy(&condition) {
-            self.execute(stmt.then_branch)?;
-        } else if let Some(else_branch) = stmt.else_branch {
+            self.execute(&stmt.then_branch)?;
+        } else if let Some(else_branch) = &stmt.else_branch {
             self.execute(else_branch)?;
         }
 

@@ -4,11 +4,11 @@ use crate::token::Token;
 pub trait StmtVisitor {
     type Output;
 
-    fn visit_expr_stmt(&mut self, stmt: ExprStmt) -> Self::Output;
-    fn visit_print_stmt(&mut self, stmt: PrintStmt) -> Self::Output;
-    fn visit_var_stmt(&mut self, stmt: VarStmt) -> Self::Output;
-    fn visit_block_stmt(&mut self, stmt: BlockStmt) -> Self::Output;
-    fn visit_if_stmt(&mut self, stmt: IfStmt) -> Self::Output;
+    fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output;
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Output;
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Self::Output;
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output;
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -51,7 +51,7 @@ pub enum Stmt {
 }
 
 impl Stmt {
-    pub fn accept<V: StmtVisitor>(self, visitor: &mut V) -> V::Output {
+    pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::Output {
         match self {
             Stmt::Expr(s) => visitor.visit_expr_stmt(s),
             Stmt::Print(s) => visitor.visit_print_stmt(s),

@@ -3,12 +3,10 @@ use std::io::BufRead;
 
 use std::{io, process};
 
-// use ast_printer::AstPrinter;
 use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
 
-mod ast_printer;
 mod enviroment;
 mod expr;
 mod interpreter;
@@ -65,11 +63,10 @@ impl Rilox {
         // Parsing
         let mut parser = Parser::new(tokens);
         let statements = parser.parse().ok_or(())?;
-        // eprintln!("DEBUG: {}", AstPrinter.print(&statements));
-
+        // dbg!(&statements);
         // Interpreting
         let mut interpreter = Interpreter::new();
-        interpreter.interpret(statements).ok_or(())
+        interpreter.interpret(&statements).ok_or(())
     }
 }
 
