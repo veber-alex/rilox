@@ -11,6 +11,7 @@ pub trait ExprVisitor {
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output;
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output;
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -47,10 +48,18 @@ pub struct UnboxedAssignExpr {
     pub value: Expr,
 }
 
+#[derive(Debug)]
+pub struct UnboxedLogicalExpr {
+    pub left: Expr,
+    pub operator: Token,
+    pub right: Expr,
+}
+
 pub type BinaryExpr = Box<UnboxedBinaryExpr>;
 pub type GroupingExpr = Box<UnboxedGroupingExpr>;
 pub type UnaryExpr = Box<UnboxedUnrayExpr>;
 pub type AssignExpr = Box<UnboxedAssignExpr>;
+pub type LogicalExpr = Box<UnboxedLogicalExpr>;
 
 #[derive(Debug)]
 pub enum Expr {
@@ -60,9 +69,22 @@ pub enum Expr {
     Unary(UnaryExpr),
     Variable(VariableExpr),
     Assign(AssignExpr),
+    Logical(LogicalExpr),
 }
 
 impl Expr {
+    pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Output {
+        match self {
+            Expr::Binary(e) => visitor.visit_binary_expr(e),
+            Expr::Grouping(e) => visitor.visit_grouping_expr(e),
+            Expr::Literal(e) => visitor.visit_literal_expr(e),
+            Expr::Unary(e) => visitor.visit_unary_expr(e),
+            Expr::Variable(e) => visitor.visit_variable_expr(e),
+            Expr::Assign(e) => visitor.visit_assign_expr(e),
+            Expr::Logical(e) => visitor.visit_logical_expr(e),
+        }
+    }
+
     pub fn binary(left: Expr, operator: Token, right: Expr) -> Expr {
         Expr::Binary(Box::new(UnboxedBinaryExpr {
             left,
@@ -91,14 +113,11 @@ impl Expr {
         Expr::Assign(Box::new(UnboxedAssignExpr { name, value }))
     }
 
-    pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Output {
-        match self {
-            Expr::Binary(e) => visitor.visit_binary_expr(e),
-            Expr::Grouping(e) => visitor.visit_grouping_expr(e),
-            Expr::Literal(e) => visitor.visit_literal_expr(e),
-            Expr::Unary(e) => visitor.visit_unary_expr(e),
-            Expr::Variable(e) => visitor.visit_variable_expr(e),
-            Expr::Assign(e) => visitor.visit_assign_expr(e),
-        }
+    pub fn logical(left: Expr, operator: Token, right: Expr) -> Expr {
+        Expr::Logical(Box::new(UnboxedLogicalExpr {
+            left,
+            operator,
+            right,
+        }))
     }
 }

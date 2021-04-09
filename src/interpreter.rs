@@ -1,10 +1,11 @@
 use crate::enviroment::EnviromentStack;
 use crate::expr::{
-    AssignExpr, BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, LogicalExpr, UnaryExpr,
+    VariableExpr,
 };
 use crate::object::LoxObject;
 use crate::report_error;
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, StmtVisitor, VarStmt};
+use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, StmtVisitor, VarStmt, WhileStmt};
 use crate::token::TokenType::*;
 
 #[derive(Debug, Default)]
@@ -46,7 +47,7 @@ impl Interpreter {
     fn is_truthy(object: &LoxObject) -> bool {
         match object {
             LoxObject::Nil => false,
-            LoxObject::Bool(b) => b.0,
+            LoxObject::Bool(b) => *b,
             _ => true,
         }
     }
@@ -65,13 +66,13 @@ impl ExprVisitor for Interpreter {
             Minus | Slash | Star | Greater | GreaterEqual | Less | LessEqual => {
                 if let (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) = (left, right) {
                     Ok(match expr.operator.ttype {
-                        Minus => LoxObject::number(lvalue.0 - rvalue.0),
-                        Slash => LoxObject::number(lvalue.0 / rvalue.0),
-                        Star => LoxObject::number(lvalue.0 * rvalue.0),
-                        Greater => LoxObject::bool(lvalue.0 > rvalue.0),
-                        GreaterEqual => LoxObject::bool(lvalue.0 >= rvalue.0),
-                        Less => LoxObject::bool(lvalue.0 < rvalue.0),
-                        LessEqual => LoxObject::bool(lvalue.0 <= rvalue.0),
+                        Minus => LoxObject::number(lvalue - rvalue),
+                        Slash => LoxObject::number(lvalue / rvalue),
+                        Star => LoxObject::number(lvalue * rvalue),
+                        Greater => LoxObject::bool(lvalue > rvalue),
+                        GreaterEqual => LoxObject::bool(lvalue >= rvalue),
+                        Less => LoxObject::bool(lvalue < rvalue),
+                        LessEqual => LoxObject::bool(lvalue <= rvalue),
                         _ => unreachable!(),
                     })
                 } else {
@@ -83,10 +84,10 @@ impl ExprVisitor for Interpreter {
             }
             Plus => match (left, right) {
                 (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) => {
-                    Ok(LoxObject::number(lvalue.0 + rvalue.0))
+                    Ok(LoxObject::number(lvalue + rvalue))
                 }
                 (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
-                    Ok(LoxObject::string(lvalue.0.as_ref().to_owned() + &rvalue.0))
+                    Ok(LoxObject::string(lvalue.as_ref().to_owned() + &rvalue))
                 }
                 _ => Err(RuntimeError::new(
                     expr.operator.line,
@@ -110,7 +111,7 @@ impl ExprVisitor for Interpreter {
         match expr.operator.ttype {
             Minus => {
                 if let LoxObject::Number(value) = right {
-                    Ok(LoxObject::number(-value.0))
+                    Ok(LoxObject::number(-value))
                 } else {
                     Err(RuntimeError::new(
                         expr.operator.line,
@@ -131,6 +132,18 @@ impl ExprVisitor for Interpreter {
         let value = self.evaluate(&expr.value)?;
         self.env_stack.assign(&expr.name, value.clone())?;
         Ok(value)
+    }
+
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output {
+        let left = self.evaluate(&expr.left)?;
+
+        if (expr.operator.ttype == Or && Self::is_truthy(&left))
+            || (expr.operator.ttype == And && !Self::is_truthy(&left))
+        {
+            Ok(left)
+        } else {
+            self.evaluate(&expr.right)
+        }
     }
 }
 
@@ -170,6 +183,14 @@ impl StmtVisitor for Interpreter {
             self.execute(&stmt.then_branch)?;
         } else if let Some(else_branch) = &stmt.else_branch {
             self.execute(else_branch)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
+        while Self::is_truthy(&self.evaluate(&stmt.condition)?) {
+            self.execute(&stmt.body)?;
         }
 
         Ok(())

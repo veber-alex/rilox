@@ -3,15 +3,15 @@ use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LoxObject {
-    Number(LoxNumber),
+    Number(f64),
     Nil,
-    Bool(LoxBool),
-    String(LoxString),
+    Bool(bool),
+    String(Rc<str>),
 }
 
 impl LoxObject {
     pub fn number(value: f64) -> LoxObject {
-        Self::Number(LoxNumber(value))
+        Self::Number(value)
     }
 
     pub fn nil() -> LoxObject {
@@ -19,11 +19,11 @@ impl LoxObject {
     }
 
     pub fn bool(value: bool) -> LoxObject {
-        Self::Bool(LoxBool(value))
+        Self::Bool(value)
     }
 
     pub fn string(value: String) -> LoxObject {
-        Self::String(LoxString(Rc::from(value)))
+        Self::String(Rc::from(value))
     }
 
     pub fn type_as_str(&self) -> &'static str {
@@ -44,35 +44,5 @@ impl Display for LoxObject {
             LoxObject::Bool(v) => v.fmt(f),
             LoxObject::String(v) => v.fmt(f),
         }
-    }
-}
-
-// Number
-#[derive(Debug, PartialEq, Clone)]
-pub struct LoxNumber(pub f64);
-
-impl Display for LoxNumber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-// False + True
-#[derive(Debug, PartialEq, Clone)]
-pub struct LoxBool(pub bool);
-
-impl Display for LoxBool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-// String
-#[derive(Debug, PartialEq, Clone)]
-pub struct LoxString(pub Rc<str>);
-
-impl Display for LoxString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
     }
 }

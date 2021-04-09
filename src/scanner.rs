@@ -3,6 +3,18 @@ use crate::report_error;
 use crate::token::{Token, TokenType};
 use std::str::CharIndices;
 
+macro_rules! number {
+    () => {
+        '0'..='9'
+    };
+}
+
+macro_rules! alpha {
+    () => {
+        'a'..='z' | 'A'..='Z' | '_'
+    };
+}
+
 pub struct Scanner<'a> {
     source: &'a str,
     source_iter: Peekable2<CharIndices<'a>>,
@@ -91,8 +103,8 @@ impl<'a> Scanner<'a> {
                     }
                 }
                 '"' => self.string(),
-                '0'..='9' => self.number(),
-                'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
+                number!() => self.number(),
+                alpha!() => self.identifier(),
                 ' ' | '\r' | '\t' => (),
                 '\n' => self.line += 1,
                 _ => self.error(self.line, "Unexpected character."),
@@ -147,18 +159,6 @@ impl<'a> Scanner<'a> {
         self.source_iter.peek_next().map(|&(_, c)| c)
     }
 
-    fn is_digit(c: char) -> bool {
-        matches!(c, '0'..='9')
-    }
-
-    fn is_alpha(c: char) -> bool {
-        matches!(c, 'a'..='z' | 'A'..='Z' | '_')
-    }
-
-    fn is_alphanumeric(c: char) -> bool {
-        Self::is_digit(c) || Self::is_alpha(c)
-    }
-
     fn string(&mut self) {
         while matches!(self.peek(), Some(c) if c != '"') {
             if self.peek() == Some('\n') {
@@ -181,15 +181,17 @@ impl<'a> Scanner<'a> {
     }
 
     fn number(&mut self) {
-        self.advance_while(Self::is_digit);
+        let is_digit = |c| matches!(c, number!());
+
+        self.advance_while(is_digit);
 
         // Look for a fractional part.
-        if matches!((self.peek(), self.peek_next()), (Some('.'), Some(c)) if Self::is_digit(c)) {
+        if matches!((self.peek(), self.peek_next()), (Some('.'), Some(c)) if is_digit(c)) {
             // Consume the "."
             self.advance();
 
             // Consume the digits after the "."
-            self.advance_while(Self::is_digit);
+            self.advance_while(is_digit);
         }
 
         let value = self.source[self.start..self.current].to_string();
@@ -220,7 +222,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn identifier(&mut self) {
-        self.advance_while(Self::is_alphanumeric);
+        self.advance_while(|c| matches!(c, number!() | alpha!()));
 
         let text = &self.source[self.start..self.current];
         let tt = self.keywords(text);

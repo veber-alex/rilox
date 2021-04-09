@@ -6,6 +6,7 @@ use std::{io, process};
 use interpreter::Interpreter;
 use parser::Parser;
 use scanner::Scanner;
+use stmt::Stmt;
 
 mod enviroment;
 mod expr;
@@ -28,29 +29,36 @@ impl Rilox {
     pub fn run_file(&mut self, path: &str) -> Result<(), io::Error> {
         let source = std::fs::read_to_string(path)?;
 
-        if self.run(&source).is_err() {
+        if let Ok(stmts) = self.prepare_run(&source) {
+            let mut interpreter = Interpreter::new();
+            if interpreter.interpret(&stmts).is_none() {
+                process::exit(66)
+            }
+            Ok(())
+        } else {
             process::exit(65)
         }
-
-        Ok(())
     }
 
-    // TODO: Don't start new interpeter on each line
     pub fn run_prompt(&mut self) -> Result<(), io::Error> {
         let mut buffer = String::new();
         let stdin = io::stdin();
         let mut handle = stdin.lock();
 
+        let mut interpreter = Interpreter::new();
+
         while handle.read_line(&mut buffer)? != 0 {
             // Ignore errors in REPL
-            let _ = self.run(buffer.trim());
+            if let Ok(stmts) = self.prepare_run(buffer.trim()) {
+                interpreter.interpret(&stmts);
+            }
             buffer.clear();
         }
 
         Ok(())
     }
 
-    fn run(&mut self, source: &str) -> Result<(), ()> {
+    fn prepare_run(&mut self, source: &str) -> Result<Vec<Stmt>, ()> {
         // Scanning
         let scanner = Scanner::new(source);
         let (tokens, had_scan_error) = scanner.scan_tokens();
@@ -62,11 +70,7 @@ impl Rilox {
 
         // Parsing
         let mut parser = Parser::new(tokens);
-        let statements = parser.parse().ok_or(())?;
-        // dbg!(&statements);
-        // Interpreting
-        let mut interpreter = Interpreter::new();
-        interpreter.interpret(&statements).ok_or(())
+        parser.parse().ok_or(())
     }
 }
 
