@@ -217,6 +217,7 @@ impl<'a> Scanner<'a> {
             "true" => True,
             "var" => Var,
             "while" => While,
+            "break" => Break,
             _ => Identifier,
         }
     }

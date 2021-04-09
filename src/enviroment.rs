@@ -1,4 +1,4 @@
-use crate::interpreter::RuntimeError;
+use crate::interpreter::ControlFlow;
 use crate::object::LoxObject;
 use crate::token::Token;
 use std::collections::HashMap;
@@ -57,7 +57,7 @@ impl EnviromentStack {
             .define(name, value);
     }
 
-    pub fn assign(&mut self, token: &Token, mut value: LoxObject) -> Result<(), RuntimeError> {
+    pub fn assign(&mut self, token: &Token, mut value: LoxObject) -> Result<(), ControlFlow> {
         for env in self.stack.iter_mut().rev() {
             if let Err(v) = env.assign(token, value) {
                 value = v;
@@ -66,20 +66,20 @@ impl EnviromentStack {
             }
         }
 
-        Err(RuntimeError::new(
+        Err(ControlFlow::new(
             token.line,
             format!("Undefined variable '{}'.", token.lexeme),
         ))
     }
 
-    pub fn get(&mut self, token: &Token) -> Result<LoxObject, RuntimeError> {
+    pub fn get(&mut self, token: &Token) -> Result<LoxObject, ControlFlow> {
         for env in self.stack.iter_mut().rev() {
             if let Some(token) = env.get(token) {
                 return Ok(token);
             }
         }
 
-        Err(RuntimeError::new(
+        Err(ControlFlow::new(
             token.line,
             format!("Undefined variable '{}'.", token.lexeme),
         ))

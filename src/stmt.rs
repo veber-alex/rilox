@@ -10,6 +10,7 @@ pub trait StmtVisitor {
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output;
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output;
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output;
+    fn visit_break_stmt(&mut self) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -57,6 +58,7 @@ pub enum Stmt {
     Block(BlockStmt),
     If(IfStmt),
     While(WhileStmt),
+    Break,
 }
 
 impl Stmt {
@@ -68,6 +70,7 @@ impl Stmt {
             Stmt::Block(s) => visitor.visit_block_stmt(s),
             Stmt::If(s) => visitor.visit_if_stmt(s),
             Stmt::While(s) => visitor.visit_while_stmt(s),
+            Stmt::Break => visitor.visit_break_stmt(),
         }
     }
 
@@ -97,5 +100,9 @@ impl Stmt {
 
     pub fn while_loop(condition: Expr, body: Stmt) -> Stmt {
         Stmt::While(Box::new(UnboxedWhileStmt { condition, body }))
+    }
+
+    pub fn break_stmt() -> Stmt {
+        Stmt::Break
     }
 }

@@ -12,12 +12,14 @@ use TokenType::*;
 #[derive(Debug)]
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>,
+    in_loop: usize,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens: tokens.into_iter().peekable(),
+            in_loop: 0,
         }
     }
 
@@ -71,6 +73,15 @@ impl Parser {
             return self.while_statement();
         }
 
+        if let Some(token) = self.next_if(|t| matches!(t, Break)) {
+            if self.in_loop > 0 {
+                self.verify(&Semicolon, "Expect ';' after break.")?;
+                return Ok(Stmt::break_stmt());
+            } else {
+                return Err(Self::error(&token, "break not allowed outside of loops"));
+            }
+        }
+
         if self.next_if(|t| matches!(t, LeftBrace)).is_some() {
             return Ok(Stmt::block(self.block()?));
         }
@@ -100,6 +111,8 @@ impl Parser {
 
     // FIXME: convert to match
     fn for_statement(&mut self) -> Result<Stmt, ParserError> {
+        self.in_loop += 1;
+
         self.verify(&LeftParen, "Expect '(' after 'for'.")?;
 
         let initializer = if self.next_if(|t| t == &Semicolon).is_some() {
@@ -132,6 +145,8 @@ impl Parser {
             body = Stmt::block(vec![initializer, body])
         };
 
+        self.in_loop -= 1;
+
         Ok(body)
     }
 
@@ -142,10 +157,14 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParserError> {
+        self.in_loop += 1;
+
         self.verify(&LeftParen, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
         self.verify(&RightParen, "Expect ')' after condition.")?;
         let body = self.statement()?;
+
+        self.in_loop -= 1;
 
         Ok(Stmt::while_loop(condition, body))
     }

@@ -26,11 +26,11 @@ impl Interpreter {
         Some(())
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, statements: &BlockStmt) -> Result<(), RuntimeError> {
+    fn execute_block(&mut self, statements: &BlockStmt) -> Result<(), ControlFlow> {
         self.env_stack.push();
         for stmt in &statements.statements {
             self.execute(stmt)?;
@@ -40,7 +40,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, ControlFlow> {
         expr.accept(self)
     }
 
@@ -54,7 +54,7 @@ impl Interpreter {
 }
 
 impl ExprVisitor for Interpreter {
-    type Output = Result<LoxObject, RuntimeError>;
+    type Output = Result<LoxObject, ControlFlow>;
 
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
         let left = self.evaluate(&expr.left)?;
@@ -76,7 +76,7 @@ impl ExprVisitor for Interpreter {
                         _ => unreachable!(),
                     })
                 } else {
-                    Err(RuntimeError::new(
+                    Err(ControlFlow::new(
                         expr.operator.line,
                         "Operands must be numbers.".into(),
                     ))
@@ -89,7 +89,7 @@ impl ExprVisitor for Interpreter {
                 (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
                     Ok(LoxObject::string(lvalue.as_ref().to_owned() + &rvalue))
                 }
-                _ => Err(RuntimeError::new(
+                _ => Err(ControlFlow::new(
                     expr.operator.line,
                     "Operands must be two numbers or two strings.".into(),
                 )),
@@ -113,7 +113,7 @@ impl ExprVisitor for Interpreter {
                 if let LoxObject::Number(value) = right {
                     Ok(LoxObject::number(-value))
                 } else {
-                    Err(RuntimeError::new(
+                    Err(ControlFlow::new(
                         expr.operator.line,
                         format!("type {} cannot be negated", right.type_as_str()),
                     ))
@@ -148,7 +148,7 @@ impl ExprVisitor for Interpreter {
 }
 
 impl StmtVisitor for Interpreter {
-    type Output = Result<(), RuntimeError>;
+    type Output = Result<(), ControlFlow>;
 
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {
         self.evaluate(&stmt.expression)?;
@@ -190,28 +190,38 @@ impl StmtVisitor for Interpreter {
 
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
         while Self::is_truthy(&self.evaluate(&stmt.condition)?) {
-            self.execute(&stmt.body)?;
+            match self.execute(&stmt.body) {
+                err @ Err(ControlFlow::Abort { .. }) => return err,
+                Err(ControlFlow::Break) => return Ok(()),
+                Ok(_) => (),
+            }
         }
 
         Ok(())
     }
+
+    fn visit_break_stmt(&mut self) -> Self::Output {
+        Err(ControlFlow::Break)
+    }
 }
 
 #[derive(Debug)]
-pub struct RuntimeError {
+pub enum ControlFlow {
     // TODO: Span type to replace line
-    line: usize,
-    msg: String,
+    Abort { line: usize, msg: String },
+    Break,
 }
 
-impl RuntimeError {
+impl ControlFlow {
     // FIXME: Use function to create errors and Cow
     pub fn new(line: usize, msg: String) -> Self {
-        Self { line, msg }
+        Self::Abort { line, msg }
     }
 
     fn report(self) -> Self {
-        report_error("Runtime", self.line, "", &self.msg);
+        if let Self::Abort { line, msg } = &self {
+            report_error("Runtime", *line, "", msg);
+        }
         self
     }
 }
