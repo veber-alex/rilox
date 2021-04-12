@@ -5,15 +5,18 @@ use std::{io, process};
 
 use interpreter::Interpreter;
 use parser::Parser;
+use resolver::Resolver;
 use scanner::Scanner;
 use stmt::Stmt;
 
+mod callable;
 mod enviroment;
 mod expr;
 mod interpreter;
 mod object;
 mod parser;
 mod peek2;
+mod resolver;
 mod scanner;
 mod stmt;
 mod token;
@@ -29,8 +32,7 @@ impl Rilox {
     pub fn run_file(&mut self, path: &str) -> Result<(), io::Error> {
         let source = std::fs::read_to_string(path)?;
 
-        if let Ok(stmts) = self.prepare_run(&source) {
-            let mut interpreter = Interpreter::new();
+        if let Ok((mut interpreter, stmts)) = self.prepare_run(&source) {
             if interpreter.interpret(&stmts).is_none() {
                 process::exit(66)
             }
@@ -45,11 +47,9 @@ impl Rilox {
         let stdin = io::stdin();
         let mut handle = stdin.lock();
 
-        let mut interpreter = Interpreter::new();
-
         while handle.read_line(&mut buffer)? != 0 {
             // Ignore errors in REPL
-            if let Ok(stmts) = self.prepare_run(buffer.trim()) {
+            if let Ok((mut interpreter, stmts)) = self.prepare_run(buffer.trim()) {
                 interpreter.interpret(&stmts);
             }
             buffer.clear();
@@ -58,7 +58,7 @@ impl Rilox {
         Ok(())
     }
 
-    fn prepare_run(&mut self, source: &str) -> Result<Vec<Stmt>, ()> {
+    fn prepare_run(&mut self, source: &str) -> Result<(Interpreter, Vec<Stmt>), ()> {
         // Scanning
         let scanner = Scanner::new(source);
         let (tokens, had_scan_error) = scanner.scan_tokens();
@@ -70,7 +70,18 @@ impl Rilox {
 
         // Parsing
         let mut parser = Parser::new(tokens);
-        parser.parse().ok_or(())
+        let stmts = parser.parse().ok_or(())?;
+
+        // Resolving
+        // FIXME: This is ugly
+        let mut interpreter = Interpreter::new();
+        let mut resolver = Resolver::new(&mut interpreter);
+        resolver.resolve(&*stmts);
+        if !resolver.ok {
+            process::exit(64)
+        }
+
+        Ok((interpreter, stmts))
     }
 }
 

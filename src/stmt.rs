@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::expr::Expr;
 use crate::token::Token;
 
@@ -11,6 +13,8 @@ pub trait StmtVisitor {
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output;
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output;
     fn visit_break_stmt(&mut self) -> Self::Output;
+    fn visit_function_stmt(&mut self, stmt: &FunStmt) -> Self::Output;
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -47,8 +51,28 @@ pub struct UnboxedWhileStmt {
     pub body: Stmt,
 }
 
+#[derive(Debug)]
+pub struct UnboxedFunStmt {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Debug)]
+pub struct ReturnStmt {
+    pub keyword: Token,
+    pub value: Option<Expr>,
+}
+
+impl PartialEq for UnboxedFunStmt {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.lexeme == other.name.lexeme
+    }
+}
+
 pub type IfStmt = Box<UnboxedIfStmt>;
 pub type WhileStmt = Box<UnboxedWhileStmt>;
+pub type FunStmt = Rc<UnboxedFunStmt>;
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -59,6 +83,8 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     Break,
+    Fun(FunStmt),
+    Return(ReturnStmt),
 }
 
 impl Stmt {
@@ -71,6 +97,8 @@ impl Stmt {
             Stmt::If(s) => visitor.visit_if_stmt(s),
             Stmt::While(s) => visitor.visit_while_stmt(s),
             Stmt::Break => visitor.visit_break_stmt(),
+            Stmt::Fun(s) => visitor.visit_function_stmt(s),
+            Stmt::Return(s) => visitor.visit_return_stmt(s),
         }
     }
 
@@ -80,6 +108,10 @@ impl Stmt {
 
     pub fn print(expression: Expr) -> Stmt {
         Stmt::Print(PrintStmt { expression })
+    }
+
+    pub fn return_stmt(keyword: Token, value: Option<Expr>) -> Self {
+        Stmt::Return(ReturnStmt { keyword, value })
     }
 
     pub fn var(name: Token, initializer: Option<Expr>) -> Stmt {
@@ -104,5 +136,9 @@ impl Stmt {
 
     pub fn break_stmt() -> Stmt {
         Stmt::Break
+    }
+
+    pub fn function(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> Stmt {
+        Stmt::Fun(Rc::new(UnboxedFunStmt { name, params, body }))
     }
 }

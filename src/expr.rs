@@ -1,6 +1,20 @@
 use crate::object::LoxObject;
 use crate::token::Token;
+use std::cell::Cell;
 use std::fmt::Debug;
+
+#[derive(Debug, Default)]
+struct VarIdCounter(Cell<usize>);
+
+impl VarIdCounter {
+    fn next(&self) -> usize {
+        self.0.replace(self.0.get() + 1)
+    }
+}
+
+thread_local! {
+    static VARID: VarIdCounter = VarIdCounter::default();
+}
 
 pub trait ExprVisitor {
     type Output;
@@ -12,6 +26,7 @@ pub trait ExprVisitor {
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output;
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output;
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -40,12 +55,21 @@ pub struct UnboxedUnrayExpr {
 #[derive(Debug)]
 pub struct VariableExpr {
     pub name: Token,
+    pub id: usize,
 }
 
 #[derive(Debug)]
 pub struct UnboxedAssignExpr {
     pub name: Token,
     pub value: Expr,
+    pub id: usize,
+}
+
+#[derive(Debug)]
+pub struct UnboxedCallExpr {
+    pub callee: Expr,
+    pub paren: Token,
+    pub arguments: Vec<Expr>,
 }
 
 #[derive(Debug)]
@@ -60,6 +84,7 @@ pub type GroupingExpr = Box<UnboxedGroupingExpr>;
 pub type UnaryExpr = Box<UnboxedUnrayExpr>;
 pub type AssignExpr = Box<UnboxedAssignExpr>;
 pub type LogicalExpr = Box<UnboxedLogicalExpr>;
+pub type CallExpr = Box<UnboxedCallExpr>;
 
 #[derive(Debug)]
 pub enum Expr {
@@ -70,6 +95,7 @@ pub enum Expr {
     Variable(VariableExpr),
     Assign(AssignExpr),
     Logical(LogicalExpr),
+    Call(CallExpr),
 }
 
 impl Expr {
@@ -82,6 +108,7 @@ impl Expr {
             Expr::Variable(e) => visitor.visit_variable_expr(e),
             Expr::Assign(e) => visitor.visit_assign_expr(e),
             Expr::Logical(e) => visitor.visit_logical_expr(e),
+            Expr::Call(e) => visitor.visit_call_expr(e),
         }
     }
 
@@ -106,11 +133,14 @@ impl Expr {
     }
 
     pub fn variable(name: Token) -> Expr {
-        Expr::Variable(VariableExpr { name })
+        Expr::Variable(VariableExpr {
+            name,
+            id: VARID.with(|v| v.next()),
+        })
     }
 
-    pub fn assign(name: Token, value: Expr) -> Expr {
-        Expr::Assign(Box::new(UnboxedAssignExpr { name, value }))
+    pub fn assign(name: Token, value: Expr, id: usize) -> Expr {
+        Expr::Assign(Box::new(UnboxedAssignExpr { name, value, id }))
     }
 
     pub fn logical(left: Expr, operator: Token, right: Expr) -> Expr {
@@ -118,6 +148,14 @@ impl Expr {
             left,
             operator,
             right,
+        }))
+    }
+
+    pub fn call(callee: Expr, paren: Token, arguments: Vec<Expr>) -> Expr {
+        Expr::Call(Box::new(UnboxedCallExpr {
+            callee,
+            paren,
+            arguments,
         }))
     }
 }

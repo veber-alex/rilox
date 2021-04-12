@@ -1,21 +1,39 @@
-use crate::enviroment::EnviromentStack;
+use crate::callable::LoxCallable;
+use crate::enviroment::Enviroment;
 use crate::expr::{
-    AssignExpr, BinaryExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, LogicalExpr, UnaryExpr,
-    VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, LogicalExpr,
+    UnaryExpr, VariableExpr,
 };
 use crate::object::LoxObject;
 use crate::report_error;
-use crate::stmt::{BlockStmt, ExprStmt, IfStmt, PrintStmt, Stmt, StmtVisitor, VarStmt, WhileStmt};
-use crate::token::TokenType::*;
+use crate::stmt::{
+    BlockStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StmtVisitor, VarStmt,
+    WhileStmt,
+};
+use crate::token::{Token, TokenType::*};
+use std::collections::HashMap;
+use std::mem;
 
 #[derive(Debug, Default)]
 pub struct Interpreter {
-    env_stack: EnviromentStack,
+    environment: Enviroment,
+    pub globals: Enviroment,
+    locals: HashMap<usize, usize>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        Default::default()
+        let environment = Enviroment::default();
+        environment.define(
+            "clock".to_string(),
+            LoxObject::callable(LoxCallable::clock()),
+        );
+
+        Self {
+            globals: environment.clone(),
+            environment,
+            ..Default::default()
+        }
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Option<()> {
@@ -30,12 +48,21 @@ impl Interpreter {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, statements: &BlockStmt) -> Result<(), ControlFlow> {
-        self.env_stack.push();
-        for stmt in &statements.statements {
-            self.execute(stmt)?;
+    pub fn execute_block(
+        &mut self,
+        statements: &[Stmt],
+        env: Enviroment,
+    ) -> Result<(), ControlFlow> {
+        let previous = mem::replace(&mut self.environment, env);
+
+        for stmt in statements {
+            if let err @ Err(_) = self.execute(stmt) {
+                self.environment = previous;
+                return err;
+            }
         }
-        self.env_stack.pop();
+
+        self.environment = previous;
 
         Ok(())
     }
@@ -49,6 +76,18 @@ impl Interpreter {
             LoxObject::Nil => false,
             LoxObject::Bool(b) => *b,
             _ => true,
+        }
+    }
+
+    pub fn resolve(&mut self, id: usize, depth: usize) {
+        self.locals.insert(id, depth);
+    }
+
+    fn lookup_variable(&mut self, id: usize, name: &Token) -> Result<LoxObject, ControlFlow> {
+        if let Some(distance) = self.locals.get(&id) {
+            self.environment.get_at(*distance, name)
+        } else {
+            self.globals.get(name)
         }
     }
 }
@@ -76,7 +115,7 @@ impl ExprVisitor for Interpreter {
                         _ => unreachable!(),
                     })
                 } else {
-                    Err(ControlFlow::new(
+                    Err(ControlFlow::abort(
                         expr.operator.line,
                         "Operands must be numbers.".into(),
                     ))
@@ -89,7 +128,7 @@ impl ExprVisitor for Interpreter {
                 (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
                     Ok(LoxObject::string(lvalue.as_ref().to_owned() + &rvalue))
                 }
-                _ => Err(ControlFlow::new(
+                _ => Err(ControlFlow::abort(
                     expr.operator.line,
                     "Operands must be two numbers or two strings.".into(),
                 )),
@@ -113,9 +152,9 @@ impl ExprVisitor for Interpreter {
                 if let LoxObject::Number(value) = right {
                     Ok(LoxObject::number(-value))
                 } else {
-                    Err(ControlFlow::new(
+                    Err(ControlFlow::abort(
                         expr.operator.line,
-                        format!("type {} cannot be negated", right.type_as_str()),
+                        "Only nunbers can be negated".to_string(),
                     ))
                 }
             }
@@ -125,12 +164,18 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
-        self.env_stack.get(&expr.name)
+        self.lookup_variable(expr.id, &expr.name)
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
         let value = self.evaluate(&expr.value)?;
-        self.env_stack.assign(&expr.name, value.clone())?;
+        if let Some(distance) = self.locals.get(&expr.id) {
+            self.environment
+                .assign_at(*distance, &expr.name, value.clone())?;
+        } else {
+            self.globals.assign(&expr.name, value.clone())?;
+        }
+
         Ok(value)
     }
 
@@ -143,6 +188,33 @@ impl ExprVisitor for Interpreter {
             Ok(left)
         } else {
             self.evaluate(&expr.right)
+        }
+    }
+
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Output {
+        let callee = self.evaluate(&expr.callee)?;
+        let arguments = expr
+            .arguments
+            .iter()
+            .map(|arg| self.evaluate(arg))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if let LoxObject::Callable(callable) = callee {
+            let args_len = arguments.len();
+            let arity = callable.arity();
+            if args_len == arity {
+                callable.call(self, arguments)
+            } else {
+                Err(ControlFlow::abort(
+                    expr.paren.line,
+                    format!("Expected {} arguments but got {}.", arity, args_len),
+                ))
+            }
+        } else {
+            Err(ControlFlow::abort(
+                expr.paren.line,
+                "Can only call functions and classes.".to_string(),
+            ))
         }
     }
 }
@@ -162,19 +234,22 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Self::Output {
-        let initializer = if let Some(expr) = &stmt.initializer {
-            self.evaluate(expr)?
-        } else {
-            LoxObject::nil()
-        };
+        let initializer = stmt
+            .initializer
+            .as_ref()
+            .map_or_else(|| Ok(LoxObject::nil()), |expr| self.evaluate(expr))?;
 
         // FIXME: Remove this clone
-        self.env_stack.define(stmt.name.lexeme.clone(), initializer);
+        self.environment
+            .define(stmt.name.lexeme.clone(), initializer);
         Ok(())
     }
 
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output {
-        self.execute_block(stmt)
+        self.execute_block(
+            &stmt.statements,
+            Enviroment::with_enclosing(self.environment.clone()),
+        )
     }
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output {
@@ -191,8 +266,8 @@ impl StmtVisitor for Interpreter {
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
         while Self::is_truthy(&self.evaluate(&stmt.condition)?) {
             match self.execute(&stmt.body) {
-                err @ Err(ControlFlow::Abort { .. }) => return err,
                 Err(ControlFlow::Break) => return Ok(()),
+                err @ Err(_) => return err,
                 Ok(_) => (),
             }
         }
@@ -203,6 +278,20 @@ impl StmtVisitor for Interpreter {
     fn visit_break_stmt(&mut self) -> Self::Output {
         Err(ControlFlow::Break)
     }
+
+    fn visit_function_stmt(&mut self, stmt: &FunStmt) -> Self::Output {
+        let function = LoxObject::callable(LoxCallable::function(
+            stmt.clone(),
+            self.environment.clone(),
+        ));
+        self.environment.define(stmt.name.lexeme.clone(), function);
+        Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Output {
+        let value = stmt.value.as_ref().map(|e| self.evaluate(e)).transpose()?;
+        Err(ControlFlow::return_(value))
+    }
 }
 
 #[derive(Debug)]
@@ -210,12 +299,17 @@ pub enum ControlFlow {
     // TODO: Span type to replace line
     Abort { line: usize, msg: String },
     Break,
+    Return(Option<LoxObject>),
 }
 
 impl ControlFlow {
     // FIXME: Use function to create errors and Cow
-    pub fn new(line: usize, msg: String) -> Self {
+    pub fn abort(line: usize, msg: String) -> Self {
         Self::Abort { line, msg }
+    }
+
+    pub fn return_(value: Option<LoxObject>) -> Self {
+        Self::Return(value)
     }
 
     fn report(self) -> Self {

@@ -4,15 +4,30 @@ use crate::report_error;
 use crate::stmt::Stmt;
 use crate::token::{Token, TokenType};
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
 use TokenType::*;
 
 #[derive(Debug)]
+enum FunctionKind {
+    Function,
+}
+
+impl Display for FunctionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FunctionKind::Function => f.write_str("function"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>,
     in_loop: usize,
+    in_fn: usize,
 }
 
 impl Parser {
@@ -20,13 +35,14 @@ impl Parser {
         Self {
             tokens: tokens.into_iter().peekable(),
             in_loop: 0,
+            in_fn: 0,
         }
     }
 
     pub fn parse(&mut self) -> Option<Vec<Stmt>> {
         let mut statements = vec![];
 
-        while !self.peek(|t| t == &Eof) {
+        while self.peek(|t| t != &Eof).is_some() {
             let stmt = self.declaration().map_err(|e| e.report()).ok()?;
             statements.push(stmt);
         }
@@ -37,10 +53,42 @@ impl Parser {
     fn declaration(&mut self) -> Result<Stmt, ParserError> {
         if self.next_if(|t| matches!(t, Var)).is_some() {
             self.var_declaration()
+        } else if self.next_if(|t| matches!(t, Fun)).is_some() {
+            self.function(FunctionKind::Function)
         } else {
             self.statement()
         }
-        // FIXME: SYNC HERE
+        // FIXME: self.sync() HERE
+    }
+
+    fn function(&mut self, kind: FunctionKind) -> Result<Stmt, ParserError> {
+        self.in_fn += 1;
+        let name = self.verify(&Identifier, format!("Expect {} name", kind))?;
+        self.verify(&LeftParen, format!("Expect '(' after {} name.", kind))?;
+
+        let mut params = vec![];
+        if self.peek(|t| t != &RightParen).is_some() {
+            loop {
+                if params.len() >= 255 {
+                    if let Some(token) = self.peek(|_| true) {
+                        // TODO: Non panicing error?
+                        return Err(Self::error(token, "Can't have more than 255 parameters."));
+                    }
+                }
+                let param = self.verify(&Identifier, "Expect parameter name.")?;
+                params.push(param);
+                if self.next_if(|t| t == &Comma).is_none() {
+                    break;
+                }
+            }
+        }
+        self.verify(&RightParen, "Expect ')' after parameters.")?;
+
+        self.verify(&LeftBrace, format!("Expect '{{' before {} body.", kind))?;
+        let body = self.block()?;
+        self.in_fn -= 1;
+
+        Ok(Stmt::function(name, params, body))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
@@ -55,7 +103,6 @@ impl Parser {
         Ok(Stmt::var(name, initializer))
     }
 
-    // FIXME: convert to match stmt
     fn statement(&mut self) -> Result<Stmt, ParserError> {
         if self.next_if(|t| matches!(t, For)).is_some() {
             return self.for_statement();
@@ -69,6 +116,10 @@ impl Parser {
             return self.print_statement();
         }
 
+        if let Some(token) = self.next_if(|t| matches!(t, Return)) {
+            return self.return_statement(token);
+        }
+
         if self.next_if(|t| matches!(t, While)).is_some() {
             return self.while_statement();
         }
@@ -78,6 +129,7 @@ impl Parser {
                 self.verify(&Semicolon, "Expect ';' after break.")?;
                 return Ok(Stmt::break_stmt());
             } else {
+                // FIXME: Non panic error
                 return Err(Self::error(&token, "break not allowed outside of loops"));
             }
         }
@@ -125,6 +177,7 @@ impl Parser {
 
         let condition = self
             .peek(|t| t != &Semicolon)
+            .is_some()
             .then(|| self.expression())
             .transpose()?
             .unwrap_or_else(|| Expr::literal(LoxObject::bool(true)));
@@ -132,6 +185,7 @@ impl Parser {
 
         let increment = self
             .peek(|t| t != &RightParen)
+            .is_some()
             .then(|| self.expression())
             .transpose()?;
         self.verify(&RightParen, "Expect ')' after for clauses.")?;
@@ -154,6 +208,20 @@ impl Parser {
         let value = self.expression()?;
         self.verify(&Semicolon, "Expect ';' after value.")?;
         Ok(Stmt::print(value))
+    }
+
+    fn return_statement(&mut self, token: Token) -> Result<Stmt, ParserError> {
+        if self.in_fn == 0 {
+            return Err(Self::error(&token, "Can't return from top-level code."));
+        }
+        let value = self
+            .peek(|t| t != &Semicolon)
+            .is_some()
+            .then(|| self.expression())
+            .transpose()?;
+
+        self.verify(&Semicolon, "Expect ';' after return value.")?;
+        Ok(Stmt::return_stmt(token, value))
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -197,8 +265,7 @@ impl Parser {
             let value = self.assignment()?;
             // verify l-value is a variable
             if let Expr::Variable(var) = expr {
-                let name = var.name;
-                Ok(Expr::assign(name, value))
+                Ok(Expr::assign(var.name, value, var.id))
             } else {
                 // TODO: Add flag to prevent SYNC and set it here
                 Err(Self::error(&token, "Invalid assignment target."))
@@ -276,10 +343,40 @@ impl Parser {
         let expr = if let Some(operator) = self.next_if(|t| matches!(t, Bang | Minus)) {
             Expr::unary(operator, self.unary()?)
         } else {
-            self.primary()?
+            self.call()?
         };
 
         Ok(expr)
+    }
+
+    fn call(&mut self) -> Result<Expr, ParserError> {
+        let mut expr = self.primary()?;
+        while self.next_if(|t| t == &LeftParen).is_some() {
+            expr = self.finish_call(expr)?;
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParserError> {
+        let mut arguments = vec![];
+        if self.peek(|t| t != &RightParen).is_some() {
+            loop {
+                if arguments.len() >= 255 {
+                    if let Some(token) = self.peek(|_| true) {
+                        // FIXME: Non panicing error
+                        return Err(Self::error(token, "Can't have more than 255 arguments."));
+                    }
+                }
+                arguments.push(self.expression()?);
+                if self.next_if(|t| t == &Comma).is_none() {
+                    break;
+                }
+            }
+        }
+        let paren = self.verify(&RightParen, "Expect ')' after arguments.")?;
+
+        Ok(Expr::call(callee, paren, arguments))
     }
 
     fn primary(&mut self) -> Result<Expr, ParserError> {
@@ -308,12 +405,15 @@ impl Parser {
 
 // Helper functions
 impl Parser {
-    fn verify(&mut self, ttype: &TokenType, message: &'static str) -> Result<Token, ParserError> {
+    fn verify<T>(&mut self, ttype: &TokenType, message: T) -> Result<Token, ParserError>
+    where
+        T: Into<Cow<'static, str>>,
+    {
         if let Some(token) = self.next_if(|t| t == ttype) {
             Ok(token)
         } else {
             let token = self.tokens.peek().expect("Tokens ended without Eof Token");
-            Err(Self::error(token, message))
+            Err(Self::error(token, message.into()))
         }
     }
 
@@ -324,14 +424,17 @@ impl Parser {
         self.tokens.next_if(|t| predicate(&t.ttype))
     }
 
-    fn peek<F>(&mut self, predicate: F) -> bool
+    fn peek<F>(&mut self, predicate: F) -> Option<&Token>
     where
         F: FnOnce(&TokenType) -> bool,
     {
-        self.tokens.peek().map(|t| predicate(&t.ttype)) == Some(true)
+        self.tokens.peek().filter(|t| predicate(&t.ttype))
     }
 
-    fn error(token: &Token, message: &'static str) -> ParserError {
+    fn error<T>(token: &Token, message: T) -> ParserError
+    where
+        T: Into<Cow<'static, str>>,
+    {
         if token.ttype == TokenType::Eof {
             ParserError::new(token.line, " at end".into(), message.into())
         } else {

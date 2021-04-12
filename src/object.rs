@@ -1,3 +1,4 @@
+use crate::callable::LoxCallable;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -7,6 +8,7 @@ pub enum LoxObject {
     Nil,
     Bool(bool),
     String(Rc<str>),
+    Callable(Rc<LoxCallable>),
 }
 
 impl LoxObject {
@@ -26,13 +28,8 @@ impl LoxObject {
         Self::String(Rc::from(value))
     }
 
-    pub fn type_as_str(&self) -> &'static str {
-        match self {
-            LoxObject::Number(_) => "Number",
-            LoxObject::Nil => "Nil",
-            LoxObject::Bool(_) => "Bool",
-            LoxObject::String(_) => "String",
-        }
+    pub fn callable(callable: LoxCallable) -> LoxObject {
+        Self::Callable(Rc::new(callable))
     }
 }
 
@@ -43,6 +40,7 @@ impl Display for LoxObject {
             LoxObject::Nil => f.write_str("Nil"),
             LoxObject::Bool(v) => v.fmt(f),
             LoxObject::String(v) => v.fmt(f),
+            LoxObject::Callable(v) => v.fmt(f),
         }
     }
 }
