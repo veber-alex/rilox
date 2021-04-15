@@ -1,6 +1,6 @@
 use crate::peek2::Peekable2;
 use crate::report_error;
-use crate::token::{Token, TokenType};
+use crate::token::{Token, TokenKind};
 use std::str::CharIndices;
 
 macro_rules! number {
@@ -44,13 +44,13 @@ impl<'a> Scanner<'a> {
             self.scan_token()
         }
         self.tokens
-            .push(Token::new(TokenType::Eof, "".to_string(), self.line));
+            .push(Token::new(TokenKind::Eof, "".to_string(), self.line));
 
         (self.tokens, self.had_error)
     }
 
     fn scan_token(&mut self) {
-        use TokenType::*;
+        use TokenKind::*;
         if let Some(c) = self.advance() {
             match c {
                 '(' => self.add_token(LeftParen),
@@ -175,9 +175,7 @@ impl<'a> Scanner<'a> {
         // The closing '"'
         self.advance();
 
-        // FIXME: Remove to_string.
-        let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token(TokenType::Str(value));
+        self.add_token(TokenKind::Str);
     }
 
     fn number(&mut self) {
@@ -194,12 +192,11 @@ impl<'a> Scanner<'a> {
             self.advance_while(is_digit);
         }
 
-        let value = self.source[self.start..self.current].to_string();
-        self.add_token(TokenType::Number(value))
+        self.add_token(TokenKind::Number)
     }
 
-    fn keywords(&self, text: &str) -> TokenType {
-        use TokenType::*;
+    fn keywords(&self, text: &str) -> TokenKind {
+        use TokenKind::*;
         match text {
             "and" => And,
             "class" => Class,
@@ -230,7 +227,7 @@ impl<'a> Scanner<'a> {
         self.add_token(tt)
     }
 
-    fn add_token(&mut self, ttype: TokenType) {
+    fn add_token(&mut self, ttype: TokenKind) {
         // FIXME: Remove to_string
         let text = self.source[self.start..self.current].to_string();
         self.tokens.push(Token::new(ttype, text, self.line))

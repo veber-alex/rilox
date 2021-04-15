@@ -11,7 +11,7 @@ use crate::stmt::{
     BlockStmt, BreakStmt, ClassStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
     StmtVisitor, VarStmt, WhileStmt,
 };
-use crate::token::{Token, TokenType::*};
+use crate::token::{Token, TokenKind::*};
 use std::collections::HashMap;
 use std::mem;
 
@@ -55,29 +55,14 @@ impl Interpreter {
         env: Enviroment,
     ) -> Result<(), ControlFlow> {
         let previous = mem::replace(&mut self.environment, env);
-
-        for stmt in statements {
-            if let err @ Err(_) = self.execute(stmt) {
-                self.environment = previous;
-                return err;
-            }
-        }
-
+        let result = statements.iter().try_for_each(|stmt| self.execute(stmt));
         self.environment = previous;
 
-        Ok(())
+        result
     }
 
     fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, ControlFlow> {
         expr.accept(self)
-    }
-
-    fn is_truthy(object: &LoxObject) -> bool {
-        match object {
-            LoxObject::Nil => false,
-            LoxObject::Bool(b) => *b,
-            _ => true,
-        }
     }
 
     pub fn resolve(&mut self, id: usize, distance: usize) {
@@ -86,7 +71,7 @@ impl Interpreter {
 
     fn lookup_variable(&mut self, id: usize, name: &Token) -> Result<LoxObject, ControlFlow> {
         if let Some(distance) = self.locals.get(&id) {
-            self.environment.get_at(*distance, &name.lexeme)
+            Ok(self.environment.get_at(*distance, &name.lexeme))
         } else {
             self.globals.get(name)
         }
@@ -100,12 +85,12 @@ impl ExprVisitor for Interpreter {
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
 
-        match expr.operator.ttype {
+        match expr.operator.kind {
             BangEqual => Ok(LoxObject::bool(left != right)),
             EqualEqual => Ok(LoxObject::bool(left == right)),
             Minus | Slash | Star | Greater | GreaterEqual | Less | LessEqual => {
                 if let (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) = (left, right) {
-                    Ok(match expr.operator.ttype {
+                    Ok(match expr.operator.kind {
                         Minus => LoxObject::number(lvalue - rvalue),
                         Slash => LoxObject::number(lvalue / rvalue),
                         Star => LoxObject::number(lvalue * rvalue),
@@ -127,7 +112,7 @@ impl ExprVisitor for Interpreter {
                     Ok(LoxObject::number(lvalue + rvalue))
                 }
                 (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
-                    Ok(LoxObject::string(lvalue.as_ref().to_owned() + &rvalue))
+                    Ok(LoxObject::string(&format!("{}{}", lvalue, rvalue)))
                 }
                 _ => Err(ControlFlow::abort(
                     expr.operator.line,
@@ -148,7 +133,7 @@ impl ExprVisitor for Interpreter {
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
         let right = self.evaluate(&expr.right)?;
-        match expr.operator.ttype {
+        match expr.operator.kind {
             Minus => {
                 if let LoxObject::Number(value) = right {
                     Ok(LoxObject::number(-value))
@@ -159,7 +144,7 @@ impl ExprVisitor for Interpreter {
                     ))
                 }
             }
-            Bang => Ok(LoxObject::bool(!Self::is_truthy(&right))),
+            Bang => Ok(LoxObject::bool(!right.is_truthy())),
             _ => unreachable!(),
         }
     }
@@ -183,8 +168,8 @@ impl ExprVisitor for Interpreter {
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output {
         let left = self.evaluate(&expr.left)?;
 
-        if (expr.operator.ttype == Or && Self::is_truthy(&left))
-            || (expr.operator.ttype == And && !Self::is_truthy(&left))
+        if (expr.operator.kind == Or && left.is_truthy())
+            || (expr.operator.kind == And && !left.is_truthy())
         {
             Ok(left)
         } else {
@@ -286,7 +271,7 @@ impl StmtVisitor for Interpreter {
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output {
         let condition = self.evaluate(&stmt.condition)?;
-        if Self::is_truthy(&condition) {
+        if condition.is_truthy() {
             self.execute(&stmt.then_branch)?;
         } else if let Some(else_branch) = &stmt.else_branch {
             self.execute(else_branch)?;
@@ -296,7 +281,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
-        while Self::is_truthy(&self.evaluate(&stmt.condition)?) {
+        while self.evaluate(&stmt.condition)?.is_truthy() {
             match self.execute(&stmt.body) {
                 Err(ControlFlow::Break) => return Ok(()),
                 err @ Err(_) => return err,

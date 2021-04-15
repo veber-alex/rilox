@@ -1,7 +1,6 @@
-use std::rc::Rc;
-
-use crate::expr::Expr;
+use crate::expr::{Expr, VariableExpr};
 use crate::token::Token;
+use std::rc::Rc;
 
 pub trait StmtVisitor {
     type Output;
@@ -40,14 +39,14 @@ pub struct BlockStmt {
 }
 
 #[derive(Debug)]
-pub struct UnboxedIfStmt {
+pub struct IfStmt {
     pub condition: Expr,
     pub then_branch: Stmt,
     pub else_branch: Option<Stmt>,
 }
 
 #[derive(Debug)]
-pub struct UnboxedWhileStmt {
+pub struct WhileStmt {
     pub condition: Expr,
     pub body: Stmt,
 }
@@ -80,10 +79,9 @@ pub struct ReturnStmt {
 pub struct ClassStmt {
     pub name: Token,
     pub methods: Vec<FunStmt>,
+    pub superclass: Option<VariableExpr>,
 }
 
-pub type IfStmt = Box<UnboxedIfStmt>;
-pub type WhileStmt = Box<UnboxedWhileStmt>;
 pub type FunStmt = Rc<UnboxedFunStmt>;
 
 #[derive(Debug)]
@@ -92,8 +90,8 @@ pub enum Stmt {
     Print(PrintStmt),
     Var(VarStmt),
     Block(BlockStmt),
-    If(IfStmt),
-    While(WhileStmt),
+    If(Box<IfStmt>),
+    While(Box<WhileStmt>),
     Break(BreakStmt),
     Fun(FunStmt),
     Return(ReturnStmt),
@@ -137,7 +135,7 @@ impl Stmt {
     }
 
     pub fn if_else(condition: Expr, then_branch: Stmt, else_branch: Option<Stmt>) -> Stmt {
-        Stmt::If(Box::new(UnboxedIfStmt {
+        Stmt::If(Box::new(IfStmt {
             condition,
             then_branch,
             else_branch,
@@ -145,7 +143,7 @@ impl Stmt {
     }
 
     pub fn while_loop(condition: Expr, body: Stmt) -> Stmt {
-        Stmt::While(Box::new(UnboxedWhileStmt { condition, body }))
+        Stmt::While(Box::new(WhileStmt { condition, body }))
     }
 
     pub fn break_stmt(keyword: Token) -> Stmt {
@@ -160,7 +158,11 @@ impl Stmt {
         Stmt::Fun(fun_stmt)
     }
 
-    pub fn class(name: Token, methods: Vec<FunStmt>) -> Self {
-        Stmt::Class(ClassStmt { name, methods })
+    pub fn class(name: Token, methods: Vec<FunStmt>, superclass: Option<VariableExpr>) -> Self {
+        Stmt::Class(ClassStmt {
+            name,
+            methods,
+            superclass,
+        })
     }
 }

@@ -1,14 +1,14 @@
-use crate::expr::Expr;
+use crate::expr::{Expr, VariableExpr};
 use crate::model::object::LoxObject;
 use crate::report_error;
 use crate::stmt::{FunStmt, Stmt};
-use crate::token::{Token, TokenType};
+use crate::token::{Token, TokenKind};
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
-use TokenType::*;
+use TokenKind::*;
 
 #[derive(Debug)]
 enum FunctionKind {
@@ -42,7 +42,7 @@ impl Parser {
     pub fn parse(&mut self) -> Option<Vec<Stmt>> {
         let mut statements = vec![];
 
-        while self.peek(|t| t != &Eof).is_some() {
+        while self.peek(|t| t != Eof).is_some() {
             let stmt = self.declaration().map_err(|e| e.report()).ok()?;
             statements.push(stmt);
         }
@@ -51,16 +51,16 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParserError> {
-        if self.next_if(|t| matches!(t, Class)).is_some() {
+        if self.eat(Class) {
             return self.class_declaration();
         }
 
-        if self.next_if(|t| matches!(t, Fun)).is_some() {
+        if self.eat(Fun) {
             let fun_stmt = self.function(FunctionKind::Function)?;
             return Ok(Stmt::function(fun_stmt));
         }
 
-        if self.next_if(|t| matches!(t, Var)).is_some() {
+        if self.eat(Var) {
             return self.var_declaration();
         }
 
@@ -70,24 +70,32 @@ impl Parser {
     }
 
     fn class_declaration(&mut self) -> Result<Stmt, ParserError> {
-        let name = self.verify(&Identifier, "Expect class name.")?;
-        self.verify(&LeftBrace, "Expect '{' before class body.")?;
+        let name = self.verify(Identifier, "Expect class name.")?;
+
+        let superclass = if self.eat(Less) {
+            let name = self.verify(Identifier, "Expect superclass name.")?;
+            Some(VariableExpr::new(name))
+        } else {
+            None
+        };
+
+        self.verify(LeftBrace, "Expect '{' before class body.")?;
 
         let mut methods = vec![];
         while self.peek(|t| !matches!(t, RightBrace | Eof)).is_some() {
             methods.push(self.function(FunctionKind::Method)?)
         }
-        self.verify(&RightBrace, "Expect '}' after class body.")?;
+        self.verify(RightBrace, "Expect '}' after class body.")?;
 
-        Ok(Stmt::class(name, methods))
+        Ok(Stmt::class(name, methods, superclass))
     }
 
     fn function(&mut self, kind: FunctionKind) -> Result<FunStmt, ParserError> {
-        let name = self.verify(&Identifier, format!("Expect {} name", kind))?;
-        self.verify(&LeftParen, format!("Expect '(' after {} name.", kind))?;
+        let name = self.verify(Identifier, format!("Expect {} name", kind))?;
+        self.verify(LeftParen, format!("Expect '(' after {} name.", kind))?;
 
         let mut params = vec![];
-        if self.peek(|t| t != &RightParen).is_some() {
+        if self.peek(|t| t != RightParen).is_some() {
             loop {
                 if params.len() >= 255 {
                     if let Some(token) = self.peek(|_| true) {
@@ -95,60 +103,57 @@ impl Parser {
                         return Err(Self::error(token, "Can't have more than 255 parameters."));
                     }
                 }
-                let param = self.verify(&Identifier, "Expect parameter name.")?;
+                let param = self.verify(Identifier, "Expect parameter name.")?;
                 params.push(param);
-                if self.next_if(|t| t == &Comma).is_none() {
+                if !self.eat(Comma) {
                     break;
                 }
             }
         }
-        self.verify(&RightParen, "Expect ')' after parameters.")?;
+        self.verify(RightParen, "Expect ')' after parameters.")?;
 
-        self.verify(&LeftBrace, format!("Expect '{{' before {} body.", kind))?;
+        self.verify(LeftBrace, format!("Expect '{{' before {} body.", kind))?;
         let body = self.block()?;
 
         Ok(Stmt::function_stmt(name, params, body))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
-        let name = self.verify(&Identifier, "Expect variable name.")?;
-        let initializer = self
-            .next_if(|t| matches!(t, Equal))
-            .map(|_| self.expression())
-            .transpose()?;
+        let name = self.verify(Identifier, "Expect variable name.")?;
+        let initializer = self.eat(Equal).then(|| self.expression()).transpose()?;
 
-        self.verify(&Semicolon, "Expect ';' after variable declaration.")?;
+        self.verify(Semicolon, "Expect ';' after variable declaration.")?;
 
         Ok(Stmt::var(name, initializer))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParserError> {
-        if self.next_if(|t| matches!(t, For)).is_some() {
+        if self.eat(For) {
             return self.for_statement();
         }
 
-        if self.next_if(|t| matches!(t, If)).is_some() {
+        if self.eat(If) {
             return self.if_statement();
         }
 
-        if self.next_if(|t| matches!(t, Print)).is_some() {
+        if self.eat(Print) {
             return self.print_statement();
         }
 
-        if let Some(token) = self.next_if(|t| matches!(t, Return)) {
+        if let Some(token) = self.get(Return) {
             return self.return_statement(token);
         }
 
-        if self.next_if(|t| matches!(t, While)).is_some() {
+        if self.eat(While) {
             return self.while_statement();
         }
 
-        if let Some(token) = self.next_if(|t| matches!(t, Break)) {
-            self.verify(&Semicolon, "Expect ';' after break.")?;
+        if let Some(token) = self.get(Break) {
+            self.verify(Semicolon, "Expect ';' after break.")?;
             return Ok(Stmt::break_stmt(token));
         }
 
-        if self.next_if(|t| matches!(t, LeftBrace)).is_some() {
+        if self.eat(LeftBrace) {
             return Ok(Stmt::block(self.block()?));
         }
 
@@ -157,50 +162,46 @@ impl Parser {
 
     fn expression_statement(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        self.verify(&Semicolon, "Expect ';' after expression.")?;
+        self.verify(Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::expr(value))
     }
 
     fn if_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.verify(&LeftParen, "Expect '(' after 'if'.")?;
+        self.verify(LeftParen, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
-        self.verify(&RightParen, "Expect ')' after if condition.")?;
+        self.verify(RightParen, "Expect ')' after if condition.")?;
 
         let then_branch = self.statement()?;
-        let else_branch = self
-            .next_if(|t| matches!(t, Else))
-            .map(|_| self.statement())
-            .transpose()?;
+        let else_branch = self.eat(Else).then(|| self.statement()).transpose()?;
 
         Ok(Stmt::if_else(condition, then_branch, else_branch))
     }
 
-    // FIXME: convert to match
     fn for_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.verify(&LeftParen, "Expect '(' after 'for'.")?;
+        self.verify(LeftParen, "Expect '(' after 'for'.")?;
 
-        let initializer = if self.next_if(|t| t == &Semicolon).is_some() {
+        let initializer = if self.eat(Semicolon) {
             None
-        } else if self.next_if(|t| t == &Var).is_some() {
+        } else if self.eat(Var) {
             Some(self.var_declaration()?)
         } else {
             Some(self.expression_statement()?)
         };
 
         let condition = self
-            .peek(|t| t != &Semicolon)
+            .peek(|t| t != Semicolon)
             .is_some()
             .then(|| self.expression())
             .transpose()?
             .unwrap_or_else(|| Expr::literal(LoxObject::bool(true)));
-        self.verify(&Semicolon, "Expect ';' after loop condition.")?;
+        self.verify(Semicolon, "Expect ';' after loop condition.")?;
 
         let increment = self
-            .peek(|t| t != &RightParen)
+            .peek(|t| t != RightParen)
             .is_some()
             .then(|| self.expression())
             .transpose()?;
-        self.verify(&RightParen, "Expect ')' after for clauses.")?;
+        self.verify(RightParen, "Expect ')' after for clauses.")?;
 
         let mut body = self.statement()?;
         if let Some(increment) = increment {
@@ -216,25 +217,25 @@ impl Parser {
 
     fn print_statement(&mut self) -> Result<Stmt, ParserError> {
         let value = self.expression()?;
-        self.verify(&Semicolon, "Expect ';' after value.")?;
+        self.verify(Semicolon, "Expect ';' after value.")?;
         Ok(Stmt::print(value))
     }
 
     fn return_statement(&mut self, token: Token) -> Result<Stmt, ParserError> {
         let value = self
-            .peek(|t| t != &Semicolon)
+            .peek(|t| t != Semicolon)
             .is_some()
             .then(|| self.expression())
             .transpose()?;
 
-        self.verify(&Semicolon, "Expect ';' after return value.")?;
+        self.verify(Semicolon, "Expect ';' after return value.")?;
         Ok(Stmt::return_stmt(token, value))
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.verify(&LeftParen, "Expect '(' after 'while'.")?;
+        self.verify(LeftParen, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
-        self.verify(&RightParen, "Expect ')' after condition.")?;
+        self.verify(RightParen, "Expect ')' after condition.")?;
         let body = self.statement()?;
 
         Ok(Stmt::while_loop(condition, body))
@@ -243,13 +244,10 @@ impl Parser {
     fn block(&mut self) -> Result<Vec<Stmt>, ParserError> {
         let mut statements = vec![];
 
-        while !matches!(
-            self.tokens.peek().map(|t| &t.ttype),
-            Some(Eof) | Some(RightBrace)
-        ) {
+        while self.peek(|t| !matches!(t, Eof | RightBrace)).is_some() {
             statements.push(self.declaration()?)
         }
-        self.verify(&RightBrace, "Expect '}' after block.")?;
+        self.verify(RightBrace, "Expect '}' after block.")?;
 
         Ok(statements)
     }
@@ -263,7 +261,7 @@ impl Parser {
         let expr = self.or()?;
 
         // Check for `=` token
-        if let Some(token) = self.next_if(|t| matches!(t, Equal)) {
+        if let Some(token) = self.get(Equal) {
             // parse r-value expression
             let value = self.assignment()?;
             // verify l-value is a variable or get expression
@@ -280,7 +278,7 @@ impl Parser {
     fn or(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.and()?;
 
-        while let Some(operator) = self.next_if(|t| matches!(t, Or)) {
+        while let Some(operator) = self.get(Or) {
             let right = self.and()?;
             expr = Expr::logical(expr, operator, right);
         }
@@ -290,8 +288,7 @@ impl Parser {
 
     fn and(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.equality()?;
-
-        while let Some(operator) = self.next_if(|t| matches!(t, And)) {
+        while let Some(operator) = self.get(And) {
             let right = self.equality()?;
             expr = Expr::logical(expr, operator, right);
         }
@@ -301,7 +298,7 @@ impl Parser {
 
     fn equality(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.comparison()?;
-        while let Some(operator) = self.next_if(|t| matches!(t, BangEqual | EqualEqual)) {
+        while let Some(operator) = self.get([BangEqual, EqualEqual]) {
             let right = self.comparison()?;
             expr = Expr::binary(expr, operator, right)
         }
@@ -311,9 +308,7 @@ impl Parser {
 
     fn comparison(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.term()?;
-        while let Some(operator) =
-            self.next_if(|t| matches!(t, Greater | GreaterEqual | Less | LessEqual))
-        {
+        while let Some(operator) = self.get([Greater, GreaterEqual, Less, LessEqual]) {
             let right = self.term()?;
             expr = Expr::binary(expr, operator, right)
         }
@@ -323,7 +318,7 @@ impl Parser {
 
     fn term(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.factor()?;
-        while let Some(operator) = self.next_if(|t| matches!(t, Minus | Plus)) {
+        while let Some(operator) = self.get([Minus, Plus]) {
             let right = self.factor()?;
             expr = Expr::binary(expr, operator, right)
         }
@@ -333,7 +328,7 @@ impl Parser {
 
     fn factor(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.unary()?;
-        while let Some(operator) = self.next_if(|t| matches!(t, Slash | Star)) {
+        while let Some(operator) = self.get([Slash, Star]) {
             let right = self.unary()?;
             expr = Expr::binary(expr, operator, right)
         }
@@ -342,22 +337,20 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, ParserError> {
-        let expr = if let Some(operator) = self.next_if(|t| matches!(t, Bang | Minus)) {
-            Expr::unary(operator, self.unary()?)
+        if let Some(operator) = self.get([Bang, Minus]) {
+            Ok(Expr::unary(operator, self.unary()?))
         } else {
-            self.call()?
-        };
-
-        Ok(expr)
+            self.call()
+        }
     }
 
     fn call(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.primary()?;
         loop {
-            if self.next_if(|t| t == &LeftParen).is_some() {
+            if self.eat(LeftParen) {
                 expr = self.finish_call(expr)?;
-            } else if self.next_if(|t| t == &Dot).is_some() {
-                let name = self.verify(&Identifier, "Expect property name after '.'.")?;
+            } else if self.eat(Dot) {
+                let name = self.verify(Identifier, "Expect property name after '.'.")?;
                 expr = Expr::get(name, expr);
             } else {
                 break;
@@ -369,7 +362,7 @@ impl Parser {
 
     fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParserError> {
         let mut arguments = vec![];
-        if self.peek(|t| t != &RightParen).is_some() {
+        if self.peek(|t| t != RightParen).is_some() {
             loop {
                 if arguments.len() >= 255 {
                     if let Some(token) = self.peek(|_| true) {
@@ -378,12 +371,12 @@ impl Parser {
                     }
                 }
                 arguments.push(self.expression()?);
-                if self.next_if(|t| t == &Comma).is_none() {
+                if !self.eat(Comma) {
                     break;
                 }
             }
         }
-        let paren = self.verify(&RightParen, "Expect ')' after arguments.")?;
+        let paren = self.verify(RightParen, "Expect ')' after arguments.")?;
 
         Ok(Expr::call(callee, paren, arguments))
     }
@@ -391,19 +384,19 @@ impl Parser {
     fn primary(&mut self) -> Result<Expr, ParserError> {
         let token = self.tokens.next().expect("Tokens ended without Eof Token");
 
-        let expr = match token.ttype {
+        let expr = match token.kind {
             False => Expr::literal(LoxObject::bool(false)),
             True => Expr::literal(LoxObject::bool(true)),
             Nil => Expr::literal(LoxObject::nil()),
-            Number(s) => Expr::literal(LoxObject::number(
-                s.parse().expect("Incorrect Token for f64"),
+            Number => Expr::literal(LoxObject::number(
+                token.lexeme.parse().expect("Incorrect Token for f64"),
             )),
-            Str(s) => Expr::literal(LoxObject::string(s)),
+            Str => Expr::literal(LoxObject::string(&token.lexeme[1..token.lexeme.len() - 1])),
             Identifier => Expr::variable(token),
             This => Expr::this(token),
             LeftParen => {
                 let expr = self.expression()?;
-                self.verify(&RightParen, "Expect ')' after expression.")?;
+                self.verify(RightParen, "Expect ')' after expression.")?;
                 Expr::grouping(expr)
             }
             _ => return Err(Self::error(&token, "Syntax Error")),
@@ -415,11 +408,11 @@ impl Parser {
 
 // Helper functions
 impl Parser {
-    fn verify<T>(&mut self, ttype: &TokenType, message: T) -> Result<Token, ParserError>
+    fn verify<T>(&mut self, kind: TokenKind, message: T) -> Result<Token, ParserError>
     where
         T: Into<Cow<'static, str>>,
     {
-        if let Some(token) = self.next_if(|t| t == ttype) {
+        if let Some(token) = self.get(kind) {
             Ok(token)
         } else {
             let token = self.tokens.peek().expect("Tokens ended without Eof Token");
@@ -427,25 +420,32 @@ impl Parser {
         }
     }
 
-    fn next_if<F>(&mut self, predicate: F) -> Option<Token>
+    fn eat<T>(&mut self, kinds: T) -> bool
     where
-        F: FnOnce(&TokenType) -> bool,
+        T: TokenKindMatches,
     {
-        self.tokens.next_if(|t| predicate(&t.ttype))
+        self.get(kinds).is_some()
+    }
+
+    fn get<T>(&mut self, kinds: T) -> Option<Token>
+    where
+        T: TokenKindMatches,
+    {
+        self.tokens.next_if(|t| kinds.matches(t.kind))
     }
 
     fn peek<F>(&mut self, predicate: F) -> Option<&Token>
     where
-        F: FnOnce(&TokenType) -> bool,
+        F: FnOnce(TokenKind) -> bool,
     {
-        self.tokens.peek().filter(|t| predicate(&t.ttype))
+        self.tokens.peek().filter(|t| predicate(t.kind))
     }
 
     fn error<T>(token: &Token, message: T) -> ParserError
     where
         T: Into<Cow<'static, str>>,
     {
-        if token.ttype == TokenType::Eof {
+        if token.kind == TokenKind::Eof {
             ParserError::new(token.line, " at end".into(), message.into())
         } else {
             ParserError::new(
@@ -472,5 +472,21 @@ impl ParserError {
     pub fn report(self) -> Self {
         report_error("Parse", self.line, &self.loc, &self.msg);
         self
+    }
+}
+
+trait TokenKindMatches {
+    fn matches(self, t: TokenKind) -> bool;
+}
+
+impl TokenKindMatches for TokenKind {
+    fn matches(self, t: TokenKind) -> bool {
+        self == t
+    }
+}
+
+impl<const N: usize> TokenKindMatches for [TokenKind; N] {
+    fn matches(self, t: TokenKind) -> bool {
+        self.contains(&t)
     }
 }

@@ -33,16 +33,6 @@ enum LoopKind {
     Loop,
 }
 
-#[derive(Debug)]
-pub struct Resolver<'a> {
-    interpreter: &'a mut Interpreter,
-    scopes: Vec<HashMap<String, bool>>,
-    current_function: FunctionKind,
-    current_class: ClassKind,
-    current_loop: LoopKind,
-    pub ok: bool,
-}
-
 pub trait Resolvable {
     fn resolve(&self, resolver: &mut Resolver<'_>);
 }
@@ -59,12 +49,28 @@ impl Resolvable for Expr {
     }
 }
 
+impl Resolvable for VariableExpr {
+    fn resolve(&self, resolver: &mut Resolver<'_>) {
+        resolver.visit_variable_expr(self)
+    }
+}
+
 impl Resolvable for [Stmt] {
     fn resolve(&self, resolver: &mut Resolver<'_>) {
         for stmt in self {
             stmt.accept(resolver);
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Resolver<'a> {
+    interpreter: &'a mut Interpreter,
+    scopes: Vec<HashMap<String, bool>>,
+    current_function: FunctionKind,
+    current_class: ClassKind,
+    current_loop: LoopKind,
+    pub had_error: bool,
 }
 
 impl<'a> Resolver<'a> {
@@ -75,13 +81,13 @@ impl<'a> Resolver<'a> {
             current_function: FunctionKind::None,
             current_class: ClassKind::None,
             current_loop: LoopKind::None,
-            ok: true,
+            had_error: false,
         }
     }
 
     fn error(&mut self, line: usize, msg: Cow<'static, str>) {
         report_error("Resolve", line, "", &msg);
-        self.ok = false;
+        self.had_error = true;
     }
 
     pub fn resolve<T: Resolvable + ?Sized>(&mut self, resolvable: &T) {
@@ -293,6 +299,13 @@ impl StmtVisitor for Resolver<'_> {
 
         self.declare(&stmt.name);
         self.define(&stmt.name);
+
+        if let Some(expr) = &stmt.superclass {
+            if stmt.name.lexeme == expr.name.lexeme {
+                self.error(expr.name.line, "A class can't inherit from itself.".into())
+            }
+            self.resolve(expr);
+        }
 
         self.begin_scope();
 

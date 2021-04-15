@@ -26,7 +26,7 @@ impl LoxObject {
         Self::Bool(value)
     }
 
-    pub fn string(value: String) -> LoxObject {
+    pub fn string(value: &str) -> LoxObject {
         Self::String(Rc::from(value))
     }
 
@@ -36,6 +36,14 @@ impl LoxObject {
 
     pub fn instance(instance: LoxInstance) -> LoxObject {
         Self::Instance(instance)
+    }
+
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Self::Nil => false,
+            Self::Bool(b) => *b,
+            _ => true,
+        }
     }
 }
 

@@ -65,21 +65,16 @@ impl Enviroment {
     }
 
     fn ancestor(&self, distance: usize) -> &Enviroment {
-        let mut enviroment = self;
+        let mut enviroment = Some(self);
         for _ in 0..distance {
-            enviroment = &enviroment
-                .0
-                .enclosing
-                .as_ref()
-                .expect("Enviroment at distance not found");
+            enviroment = enviroment.and_then(|e| e.0.enclosing.as_ref())
         }
 
-        enviroment
+        enviroment.expect("Enviroment at distance not found")
     }
 
-    pub fn get_at(&self, distance: usize, name: &str) -> Result<LoxObject, ControlFlow> {
-        Ok(self
-            .ancestor(distance)
+    pub fn get_at(&self, distance: usize, name: &str) -> LoxObject {
+        self.ancestor(distance)
             .0
             .values
             .borrow()
@@ -90,7 +85,7 @@ impl Enviroment {
                     distance, name
                 )
             })
-            .clone())
+            .clone()
     }
 
     pub fn assign_at(

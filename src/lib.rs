@@ -76,7 +76,7 @@ impl Rilox {
         let mut interpreter = Interpreter::new();
         let mut resolver = Resolver::new(&mut interpreter);
         resolver.resolve(&*stmts);
-        if !resolver.ok {
+        if resolver.had_error {
             process::exit(64)
         }
 

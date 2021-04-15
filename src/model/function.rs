@@ -34,7 +34,7 @@ impl LoxFunction {
 
         match interpreter.execute_block(&self.declaration.body, env) {
             // init() always returns 'this'
-            _ if self.is_initializer => self.closure.get_at(0, "this"),
+            _ if self.is_initializer => Ok(self.closure.get_at(0, "this")),
             Err(ControlFlow::Return(Some(v))) => Ok(v),
             Err(ControlFlow::Return(None)) => Ok(LoxObject::nil()),
             Ok(_) => Ok(LoxObject::nil()),
