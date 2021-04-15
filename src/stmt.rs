@@ -12,9 +12,10 @@ pub trait StmtVisitor {
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output;
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output;
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output;
-    fn visit_break_stmt(&mut self) -> Self::Output;
+    fn visit_break_stmt(&mut self, stmt: &BreakStmt) -> Self::Output;
     fn visit_function_stmt(&mut self, stmt: &FunStmt) -> Self::Output;
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Output;
+    fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -52,10 +53,21 @@ pub struct UnboxedWhileStmt {
 }
 
 #[derive(Debug)]
+pub struct BreakStmt {
+    pub keyword: Token,
+}
+
+#[derive(Debug)]
 pub struct UnboxedFunStmt {
     pub name: Token,
     pub params: Vec<Token>,
     pub body: Vec<Stmt>,
+}
+
+impl PartialEq for UnboxedFunStmt {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.lexeme == other.name.lexeme
+    }
 }
 
 #[derive(Debug)]
@@ -64,10 +76,10 @@ pub struct ReturnStmt {
     pub value: Option<Expr>,
 }
 
-impl PartialEq for UnboxedFunStmt {
-    fn eq(&self, other: &Self) -> bool {
-        self.name.lexeme == other.name.lexeme
-    }
+#[derive(Debug)]
+pub struct ClassStmt {
+    pub name: Token,
+    pub methods: Vec<FunStmt>,
 }
 
 pub type IfStmt = Box<UnboxedIfStmt>;
@@ -82,9 +94,10 @@ pub enum Stmt {
     Block(BlockStmt),
     If(IfStmt),
     While(WhileStmt),
-    Break,
+    Break(BreakStmt),
     Fun(FunStmt),
     Return(ReturnStmt),
+    Class(ClassStmt),
 }
 
 impl Stmt {
@@ -96,9 +109,10 @@ impl Stmt {
             Stmt::Block(s) => visitor.visit_block_stmt(s),
             Stmt::If(s) => visitor.visit_if_stmt(s),
             Stmt::While(s) => visitor.visit_while_stmt(s),
-            Stmt::Break => visitor.visit_break_stmt(),
+            Stmt::Break(s) => visitor.visit_break_stmt(s),
             Stmt::Fun(s) => visitor.visit_function_stmt(s),
             Stmt::Return(s) => visitor.visit_return_stmt(s),
+            Stmt::Class(s) => visitor.visit_class_stmt(s),
         }
     }
 
@@ -134,11 +148,19 @@ impl Stmt {
         Stmt::While(Box::new(UnboxedWhileStmt { condition, body }))
     }
 
-    pub fn break_stmt() -> Stmt {
-        Stmt::Break
+    pub fn break_stmt(keyword: Token) -> Stmt {
+        Stmt::Break(BreakStmt { keyword })
     }
 
-    pub fn function(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> Stmt {
-        Stmt::Fun(Rc::new(UnboxedFunStmt { name, params, body }))
+    pub fn function_stmt(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> FunStmt {
+        Rc::new(UnboxedFunStmt { name, params, body })
+    }
+
+    pub fn function(fun_stmt: FunStmt) -> Stmt {
+        Stmt::Fun(fun_stmt)
+    }
+
+    pub fn class(name: Token, methods: Vec<FunStmt>) -> Self {
+        Stmt::Class(ClassStmt { name, methods })
     }
 }

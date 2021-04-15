@@ -1,4 +1,4 @@
-use crate::object::LoxObject;
+use crate::model::object::LoxObject;
 use crate::token::Token;
 use std::cell::Cell;
 use std::fmt::Debug;
@@ -27,6 +27,9 @@ pub trait ExprVisitor {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output;
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output;
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Output;
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output;
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output;
+    fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -79,12 +82,33 @@ pub struct UnboxedLogicalExpr {
     pub right: Expr,
 }
 
+#[derive(Debug)]
+pub struct UnboxedGetExpr {
+    pub name: Token,
+    pub object: Expr,
+}
+
+#[derive(Debug)]
+pub struct UnboxedSetExpr {
+    pub object: Expr,
+    pub name: Token,
+    pub value: Expr,
+}
+
+#[derive(Debug)]
+pub struct ThisExpr {
+    pub keyword: Token,
+    pub id: usize,
+}
+
 pub type BinaryExpr = Box<UnboxedBinaryExpr>;
 pub type GroupingExpr = Box<UnboxedGroupingExpr>;
 pub type UnaryExpr = Box<UnboxedUnrayExpr>;
 pub type AssignExpr = Box<UnboxedAssignExpr>;
 pub type LogicalExpr = Box<UnboxedLogicalExpr>;
 pub type CallExpr = Box<UnboxedCallExpr>;
+pub type GetExpr = Box<UnboxedGetExpr>;
+pub type SetExpr = Box<UnboxedSetExpr>;
 
 #[derive(Debug)]
 pub enum Expr {
@@ -96,6 +120,9 @@ pub enum Expr {
     Assign(AssignExpr),
     Logical(LogicalExpr),
     Call(CallExpr),
+    Get(GetExpr),
+    Set(SetExpr),
+    This(ThisExpr),
 }
 
 impl Expr {
@@ -109,6 +136,9 @@ impl Expr {
             Expr::Assign(e) => visitor.visit_assign_expr(e),
             Expr::Logical(e) => visitor.visit_logical_expr(e),
             Expr::Call(e) => visitor.visit_call_expr(e),
+            Expr::Get(e) => visitor.visit_get_expr(e),
+            Expr::Set(e) => visitor.visit_set_expr(e),
+            Expr::This(e) => visitor.visit_this_expr(e),
         }
     }
 
@@ -157,5 +187,24 @@ impl Expr {
             paren,
             arguments,
         }))
+    }
+
+    pub fn get(name: Token, object: Expr) -> Expr {
+        Expr::Get(Box::new(UnboxedGetExpr { name, object }))
+    }
+
+    pub fn set(object: Expr, name: Token, value: Expr) -> Expr {
+        Expr::Set(Box::new(UnboxedSetExpr {
+            object,
+            name,
+            value,
+        }))
+    }
+
+    pub fn this(keyword: Token) -> Expr {
+        Expr::This(ThisExpr {
+            keyword,
+            id: VARID.with(|v| v.next()),
+        })
     }
 }

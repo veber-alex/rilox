@@ -1,14 +1,15 @@
-use crate::callable::LoxCallable;
 use crate::enviroment::Enviroment;
 use crate::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, LogicalExpr,
-    UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GetExpr, GroupingExpr, LiteralExpr,
+    LogicalExpr, SetExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
-use crate::object::LoxObject;
+use crate::model::callable::LoxCallable;
+use crate::model::function::LoxFunction;
+use crate::model::object::LoxObject;
 use crate::report_error;
 use crate::stmt::{
-    BlockStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StmtVisitor, VarStmt,
-    WhileStmt,
+    BlockStmt, BreakStmt, ClassStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
+    StmtVisitor, VarStmt, WhileStmt,
 };
 use crate::token::{Token, TokenType::*};
 use std::collections::HashMap;
@@ -79,13 +80,13 @@ impl Interpreter {
         }
     }
 
-    pub fn resolve(&mut self, id: usize, depth: usize) {
-        self.locals.insert(id, depth);
+    pub fn resolve(&mut self, id: usize, distance: usize) {
+        self.locals.insert(id, distance);
     }
 
     fn lookup_variable(&mut self, id: usize, name: &Token) -> Result<LoxObject, ControlFlow> {
         if let Some(distance) = self.locals.get(&id) {
-            self.environment.get_at(*distance, name)
+            self.environment.get_at(*distance, &name.lexeme)
         } else {
             self.globals.get(name)
         }
@@ -217,6 +218,37 @@ impl ExprVisitor for Interpreter {
             ))
         }
     }
+
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output {
+        let object = self.evaluate(&expr.object)?;
+        if let LoxObject::Instance(instance) = object {
+            instance.get(&expr.name)
+        } else {
+            Err(ControlFlow::abort(
+                expr.name.line,
+                "Only instances have properties.".to_string(),
+            ))
+        }
+    }
+
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output {
+        let object = self.evaluate(&expr.object)?;
+
+        if let LoxObject::Instance(instance) = object {
+            let value = self.evaluate(&expr.value)?;
+            instance.set(&expr.name, value.clone());
+            Ok(value)
+        } else {
+            Err(ControlFlow::abort(
+                expr.name.line,
+                "Only instances have fields.".to_string(),
+            ))
+        }
+    }
+
+    fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
+        self.lookup_variable(expr.id, &expr.keyword)
+    }
 }
 
 impl StmtVisitor for Interpreter {
@@ -275,7 +307,7 @@ impl StmtVisitor for Interpreter {
         Ok(())
     }
 
-    fn visit_break_stmt(&mut self) -> Self::Output {
+    fn visit_break_stmt(&mut self, _stmt: &BreakStmt) -> Self::Output {
         Err(ControlFlow::Break)
     }
 
@@ -283,6 +315,7 @@ impl StmtVisitor for Interpreter {
         let function = LoxObject::callable(LoxCallable::function(
             stmt.clone(),
             self.environment.clone(),
+            false,
         ));
         self.environment.define(stmt.name.lexeme.clone(), function);
         Ok(())
@@ -291,6 +324,24 @@ impl StmtVisitor for Interpreter {
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Output {
         let value = stmt.value.as_ref().map(|e| self.evaluate(e)).transpose()?;
         Err(ControlFlow::return_(value))
+    }
+
+    fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
+        self.environment
+            .define(stmt.name.lexeme.clone(), LoxObject::nil());
+
+        let mut methods = HashMap::new();
+        for method in &stmt.methods {
+            let is_initializer = method.name.lexeme == "init";
+            let function =
+                LoxFunction::new(method.clone(), self.environment.clone(), is_initializer);
+            methods.insert(method.name.lexeme.clone(), function);
+        }
+
+        let class = LoxObject::callable(LoxCallable::class(stmt.name.lexeme.clone(), methods));
+        self.environment.assign(&stmt.name, class)?;
+
+        Ok(())
     }
 }
 

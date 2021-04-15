@@ -1,21 +1,20 @@
-use std::fmt::Debug;
-use std::io::BufRead;
-
-use std::{io, process};
+#![deny(rust_2018_idioms)]
 
 use interpreter::Interpreter;
 use parser::Parser;
 use resolver::Resolver;
 use scanner::Scanner;
+use std::fmt::Debug;
+use std::io::BufRead;
+use std::{io, process};
 use stmt::Stmt;
 
-mod callable;
 mod enviroment;
 mod expr;
 mod interpreter;
-mod object;
+mod model;
 mod parser;
-mod peek2;
+pub mod peek2;
 mod resolver;
 mod scanner;
 mod stmt;

@@ -1,5 +1,5 @@
 use crate::interpreter::ControlFlow;
-use crate::object::LoxObject;
+use crate::model::object::LoxObject;
 use crate::token::Token;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,13 +13,13 @@ pub struct EnviromentInner {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 // TODO: Try to remove this Rc
-pub struct Enviroment(Rc<EnviromentInner>);
+pub struct Enviroment(pub Rc<EnviromentInner>);
 
 impl Enviroment {
     pub fn with_enclosing(enclosing: Enviroment) -> Self {
         Self(Rc::new(EnviromentInner {
             enclosing: Some(enclosing),
-            values: RefCell::new(HashMap::new()),
+            values: Default::default(),
         }))
     }
 
@@ -77,14 +77,19 @@ impl Enviroment {
         enviroment
     }
 
-    pub fn get_at(&self, distance: usize, name: &Token) -> Result<LoxObject, ControlFlow> {
+    pub fn get_at(&self, distance: usize, name: &str) -> Result<LoxObject, ControlFlow> {
         Ok(self
             .ancestor(distance)
             .0
             .values
             .borrow()
-            .get(&name.lexeme)
-            .expect("Resolved variable not found")
+            .get(name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Resolved variable not found. distance: {:?},  name: {:?}",
+                    distance, name
+                )
+            })
             .clone())
     }
 

@@ -1,7 +1,7 @@
 use crate::expr::Expr;
-use crate::object::LoxObject;
+use crate::model::object::LoxObject;
 use crate::report_error;
-use crate::stmt::Stmt;
+use crate::stmt::{FunStmt, Stmt};
 use crate::token::{Token, TokenType};
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -13,12 +13,14 @@ use TokenType::*;
 #[derive(Debug)]
 enum FunctionKind {
     Function,
+    Method,
 }
 
 impl Display for FunctionKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FunctionKind::Function => f.write_str("function"),
+            FunctionKind::Method => f.write_str("method"),
         }
     }
 }
@@ -26,16 +28,14 @@ impl Display for FunctionKind {
 #[derive(Debug)]
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>,
-    in_loop: usize,
-    in_fn: usize,
+    //  TODO: Add lookback of Token for better error messages
+    // lookback: Token,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens: tokens.into_iter().peekable(),
-            in_loop: 0,
-            in_fn: 0,
         }
     }
 
@@ -51,18 +51,38 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParserError> {
-        if self.next_if(|t| matches!(t, Var)).is_some() {
-            self.var_declaration()
-        } else if self.next_if(|t| matches!(t, Fun)).is_some() {
-            self.function(FunctionKind::Function)
-        } else {
-            self.statement()
+        if self.next_if(|t| matches!(t, Class)).is_some() {
+            return self.class_declaration();
         }
+
+        if self.next_if(|t| matches!(t, Fun)).is_some() {
+            let fun_stmt = self.function(FunctionKind::Function)?;
+            return Ok(Stmt::function(fun_stmt));
+        }
+
+        if self.next_if(|t| matches!(t, Var)).is_some() {
+            return self.var_declaration();
+        }
+
+        self.statement()
+
         // FIXME: self.sync() HERE
     }
 
-    fn function(&mut self, kind: FunctionKind) -> Result<Stmt, ParserError> {
-        self.in_fn += 1;
+    fn class_declaration(&mut self) -> Result<Stmt, ParserError> {
+        let name = self.verify(&Identifier, "Expect class name.")?;
+        self.verify(&LeftBrace, "Expect '{' before class body.")?;
+
+        let mut methods = vec![];
+        while self.peek(|t| !matches!(t, RightBrace | Eof)).is_some() {
+            methods.push(self.function(FunctionKind::Method)?)
+        }
+        self.verify(&RightBrace, "Expect '}' after class body.")?;
+
+        Ok(Stmt::class(name, methods))
+    }
+
+    fn function(&mut self, kind: FunctionKind) -> Result<FunStmt, ParserError> {
         let name = self.verify(&Identifier, format!("Expect {} name", kind))?;
         self.verify(&LeftParen, format!("Expect '(' after {} name.", kind))?;
 
@@ -86,9 +106,8 @@ impl Parser {
 
         self.verify(&LeftBrace, format!("Expect '{{' before {} body.", kind))?;
         let body = self.block()?;
-        self.in_fn -= 1;
 
-        Ok(Stmt::function(name, params, body))
+        Ok(Stmt::function_stmt(name, params, body))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, ParserError> {
@@ -125,13 +144,8 @@ impl Parser {
         }
 
         if let Some(token) = self.next_if(|t| matches!(t, Break)) {
-            if self.in_loop > 0 {
-                self.verify(&Semicolon, "Expect ';' after break.")?;
-                return Ok(Stmt::break_stmt());
-            } else {
-                // FIXME: Non panic error
-                return Err(Self::error(&token, "break not allowed outside of loops"));
-            }
+            self.verify(&Semicolon, "Expect ';' after break.")?;
+            return Ok(Stmt::break_stmt(token));
         }
 
         if self.next_if(|t| matches!(t, LeftBrace)).is_some() {
@@ -163,8 +177,6 @@ impl Parser {
 
     // FIXME: convert to match
     fn for_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.in_loop += 1;
-
         self.verify(&LeftParen, "Expect '(' after 'for'.")?;
 
         let initializer = if self.next_if(|t| t == &Semicolon).is_some() {
@@ -199,8 +211,6 @@ impl Parser {
             body = Stmt::block(vec![initializer, body])
         };
 
-        self.in_loop -= 1;
-
         Ok(body)
     }
 
@@ -211,9 +221,6 @@ impl Parser {
     }
 
     fn return_statement(&mut self, token: Token) -> Result<Stmt, ParserError> {
-        if self.in_fn == 0 {
-            return Err(Self::error(&token, "Can't return from top-level code."));
-        }
         let value = self
             .peek(|t| t != &Semicolon)
             .is_some()
@@ -225,14 +232,10 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> Result<Stmt, ParserError> {
-        self.in_loop += 1;
-
         self.verify(&LeftParen, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
         self.verify(&RightParen, "Expect ')' after condition.")?;
         let body = self.statement()?;
-
-        self.in_loop -= 1;
 
         Ok(Stmt::while_loop(condition, body))
     }
@@ -263,12 +266,11 @@ impl Parser {
         if let Some(token) = self.next_if(|t| matches!(t, Equal)) {
             // parse r-value expression
             let value = self.assignment()?;
-            // verify l-value is a variable
-            if let Expr::Variable(var) = expr {
-                Ok(Expr::assign(var.name, value, var.id))
-            } else {
-                // TODO: Add flag to prevent SYNC and set it here
-                Err(Self::error(&token, "Invalid assignment target."))
+            // verify l-value is a variable or get expression
+            match expr {
+                Expr::Variable(var) => Ok(Expr::assign(var.name, value, var.id)),
+                Expr::Get(get) => Ok(Expr::set(get.object, get.name, value)),
+                _ => Err(Self::error(&token, "Invalid assignment target.")),
             }
         } else {
             Ok(expr)
@@ -351,8 +353,15 @@ impl Parser {
 
     fn call(&mut self) -> Result<Expr, ParserError> {
         let mut expr = self.primary()?;
-        while self.next_if(|t| t == &LeftParen).is_some() {
-            expr = self.finish_call(expr)?;
+        loop {
+            if self.next_if(|t| t == &LeftParen).is_some() {
+                expr = self.finish_call(expr)?;
+            } else if self.next_if(|t| t == &Dot).is_some() {
+                let name = self.verify(&Identifier, "Expect property name after '.'.")?;
+                expr = Expr::get(name, expr);
+            } else {
+                break;
+            }
         }
 
         Ok(expr)
@@ -391,6 +400,7 @@ impl Parser {
             )),
             Str(s) => Expr::literal(LoxObject::string(s)),
             Identifier => Expr::variable(token),
+            This => Expr::this(token),
             LeftParen => {
                 let expr = self.expression()?;
                 self.verify(&RightParen, "Expect ')' after expression.")?;

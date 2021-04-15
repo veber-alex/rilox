@@ -1,21 +1,45 @@
 use crate::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GroupingExpr, LiteralExpr, LogicalExpr,
-    UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GetExpr, GroupingExpr, LiteralExpr,
+    LogicalExpr, SetExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
 use crate::interpreter::Interpreter;
 use crate::report_error;
 use crate::stmt::{
-    BlockStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt, StmtVisitor, VarStmt,
-    WhileStmt,
+    BlockStmt, BreakStmt, ClassStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
+    StmtVisitor, VarStmt, WhileStmt,
 };
 use crate::token::Token;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::mem;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum FunctionKind {
+    None,
+    Function,
+    Method,
+    Initializer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ClassKind {
+    None,
+    Class,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum LoopKind {
+    None,
+    Loop,
+}
 
 #[derive(Debug)]
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
+    current_function: FunctionKind,
+    current_class: ClassKind,
+    current_loop: LoopKind,
     pub ok: bool,
 }
 
@@ -48,6 +72,9 @@ impl<'a> Resolver<'a> {
         Self {
             interpreter,
             scopes: vec![],
+            current_function: FunctionKind::None,
+            current_class: ClassKind::None,
+            current_loop: LoopKind::None,
             ok: true,
         }
     }
@@ -90,23 +117,25 @@ impl<'a> Resolver<'a> {
 
     fn resolve_local(&mut self, id: usize, name: &Token) {
         for (distance, map) in self.scopes.iter().rev().enumerate() {
-            if map.get(&name.lexeme).is_some() {
+            if map.contains_key(&name.lexeme) {
                 self.interpreter.resolve(id, distance);
                 return;
             }
         }
     }
 
-    fn resolve_function(&mut self, function: &FunStmt) {
+    fn resolve_function(&mut self, function: &FunStmt, kind: FunctionKind) {
+        let enclosing_function = mem::replace(&mut self.current_function, kind);
         self.begin_scope();
+
         for param in &function.params {
             self.declare(param);
             self.define(param);
         }
-        let res = self.resolve(function.body.as_slice());
-        self.end_scope();
+        self.resolve(function.body.as_slice());
 
-        res
+        self.end_scope();
+        self.current_function = enclosing_function;
     }
 }
 
@@ -161,17 +190,37 @@ impl ExprVisitor for Resolver<'_> {
             self.resolve(arg);
         }
     }
+
+    fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output {
+        self.resolve(&expr.object);
+    }
+
+    fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output {
+        self.resolve(&expr.value);
+        self.resolve(&expr.object);
+    }
+
+    fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
+        if self.current_class == ClassKind::Class {
+            self.resolve_local(expr.id, &expr.keyword)
+        } else {
+            self.error(
+                expr.keyword.line,
+                "Can't use 'this' outside of a class.".into(),
+            )
+        }
+    }
 }
 
 impl StmtVisitor for Resolver<'_> {
     type Output = ();
 
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {
-        self.resolve(&stmt.expression)
+        self.resolve(&stmt.expression);
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Output {
-        self.resolve(&stmt.expression)
+        self.resolve(&stmt.expression);
     }
 
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Self::Output {
@@ -184,10 +233,8 @@ impl StmtVisitor for Resolver<'_> {
 
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output {
         self.begin_scope();
-        let res = self.resolve(stmt.statements.as_slice());
+        self.resolve(stmt.statements.as_slice());
         self.end_scope();
-
-        res
     }
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output {
@@ -199,22 +246,71 @@ impl StmtVisitor for Resolver<'_> {
     }
 
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
+        let current_loop = mem::replace(&mut self.current_loop, LoopKind::Loop);
+
         self.resolve(&stmt.condition);
-        self.resolve(&stmt.body)
+        self.resolve(&stmt.body);
+
+        self.current_loop = current_loop;
     }
 
-    fn visit_break_stmt(&mut self) -> Self::Output {}
+    fn visit_break_stmt(&mut self, stmt: &BreakStmt) -> Self::Output {
+        if self.current_loop == LoopKind::None {
+            self.error(
+                stmt.keyword.line,
+                "Can't use 'break' outside of a loop".into(),
+            )
+        }
+    }
 
     fn visit_function_stmt(&mut self, stmt: &FunStmt) -> Self::Output {
         self.declare(&stmt.name);
         self.define(&stmt.name);
 
-        self.resolve_function(stmt)
+        self.resolve_function(stmt, FunctionKind::Function)
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Output {
+        if self.current_function == FunctionKind::None {
+            self.error(
+                stmt.keyword.line,
+                "Can't return from top-level code.".into(),
+            )
+        }
         if let Some(value) = &stmt.value {
+            if self.current_function == FunctionKind::Initializer {
+                self.error(
+                    stmt.keyword.line,
+                    "Can't return a value from an initializer.".into(),
+                )
+            }
             self.resolve(value);
         }
+    }
+
+    fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
+        let enclosing_class = mem::replace(&mut self.current_class, ClassKind::Class);
+
+        self.declare(&stmt.name);
+        self.define(&stmt.name);
+
+        self.begin_scope();
+
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert("this".into(), true);
+        }
+
+        for method in &stmt.methods {
+            let declaration = if method.name.lexeme == "init" {
+                FunctionKind::Initializer
+            } else {
+                FunctionKind::Method
+            };
+            self.resolve_function(method, declaration);
+        }
+
+        self.end_scope();
+
+        self.current_class = enclosing_class;
     }
 }
