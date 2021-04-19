@@ -56,10 +56,6 @@ impl LoxObject {
         LoxObject::Callable(LoxCallable::Class(LoxClass::new(name, superclass, methods)))
     }
 
-    pub fn builtin_fn<T: BuiltinFn + 'static>(t: T) -> LoxObject {
-        LoxObject::Callable(LoxCallable::Builtin(Rc::new(t)))
-    }
-
     pub fn is_truthy(&self) -> bool {
         match self {
             Self::Nil => false,
@@ -91,5 +87,11 @@ impl From<LoxFunction> for LoxObject {
 impl From<LoxClass> for LoxObject {
     fn from(c: LoxClass) -> Self {
         LoxObject::Callable(LoxCallable::Class(c))
+    }
+}
+
+impl From<&'static dyn BuiltinFn> for LoxObject {
+    fn from(obj: &'static dyn BuiltinFn) -> Self {
+        LoxObject::Callable(LoxCallable::Builtin(obj))
     }
 }

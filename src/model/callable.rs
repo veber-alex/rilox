@@ -3,7 +3,6 @@ use super::function::LoxFunction;
 use super::object::LoxObject;
 use crate::interpreter::{ControlFlow, Interpreter};
 use std::fmt::Display;
-use std::rc::Rc;
 
 pub trait BuiltinFn: Display + std::fmt::Debug {
     fn call(
@@ -19,7 +18,7 @@ pub trait BuiltinFn: Display + std::fmt::Debug {
 
 #[derive(Debug, Clone)]
 pub enum LoxCallable {
-    Builtin(Rc<dyn BuiltinFn>),
+    Builtin(&'static dyn BuiltinFn),
     Function(LoxFunction),
     Class(LoxClass),
 }

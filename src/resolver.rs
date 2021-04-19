@@ -109,8 +109,9 @@ impl<'a> Resolver<'a> {
         resolvable.resolve(self)
     }
 
-    fn begin_scope(&mut self) {
-        self.scopes.push(Default::default())
+    fn begin_scope(&mut self) -> &mut Scope {
+        self.scopes.push(Default::default());
+        self.scopes.last_mut().expect("Just inserted")
     }
 
     fn end_scope(&mut self) {
@@ -122,7 +123,7 @@ impl<'a> Resolver<'a> {
             if scope.map.contains_key(&name.lexeme) {
                 self.error(
                     name.line,
-                    "Already variable with this name in this scope.".into(),
+                    "Already a variable with this name in this scope.".into(),
                 );
             } else {
                 scope.insert(name.lexeme.clone(), false);
@@ -345,21 +346,11 @@ impl StmtVisitor for Resolver<'_> {
 
         // Scope for 'super'
         if stmt.superclass.is_some() {
-            self.begin_scope();
-
-            self.scopes
-                .last_mut()
-                .expect("Empty scopes")
-                .insert("super".into(), true)
+            self.begin_scope().insert("super".into(), true);
         }
 
         // Scope for class methods
-        self.begin_scope();
-
-        self.scopes
-            .last_mut()
-            .expect("Empty scopes")
-            .insert("this".into(), true);
+        self.begin_scope().insert("this".into(), true);
 
         for method in &stmt.methods {
             let declaration = if method.name.lexeme == "init" {

@@ -35,11 +35,11 @@ impl Display for Clock {
 }
 
 pub fn install_builtins(resolver: &mut Resolver<'_>) {
-    let clock = LoxObject::builtin_fn(Clock);
+    let clock: &'static dyn BuiltinFn = &Clock;
 
     let builtins = [clock];
-    for fun in array::IntoIter::new(builtins) {
-        resolver.interpreter.environment.define(fun);
-        resolver.scopes[0].insert("clock".into(), true);
+    for obj in array::IntoIter::new(builtins) {
+        resolver.scopes[0].insert(obj.name().to_string(), true);
+        resolver.interpreter.environment.define(obj.into());
     }
 }

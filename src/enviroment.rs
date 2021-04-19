@@ -9,8 +9,7 @@ pub struct EnviromentInner {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-// TODO: Try to remove this Rc
-pub struct Enviroment(pub Rc<EnviromentInner>);
+pub struct Enviroment(Rc<EnviromentInner>);
 
 impl Enviroment {
     pub fn with_enclosing(enclosing: Enviroment) -> Self {
