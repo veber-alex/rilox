@@ -27,14 +27,13 @@ impl LoxFunction {
         arguments: Vec<LoxObject>,
     ) -> Result<LoxObject, ControlFlow> {
         let env = Enviroment::with_enclosing(self.closure.clone());
-        for (token, value) in self.declaration.params.iter().zip(arguments) {
-            // FIXME: This is a String clone
-            env.define(token.lexeme.clone(), value)
+        for value in arguments {
+            env.define(value);
         }
 
         match interpreter.execute_block(&self.declaration.body, env) {
             // init() always returns 'this'
-            _ if self.is_initializer => Ok(self.closure.get_at(0, "this")),
+            _ if self.is_initializer => Ok(self.closure.get_at(0, 0)),
             Err(ControlFlow::Return(Some(v))) => Ok(v),
             Err(ControlFlow::Return(None)) => Ok(LoxObject::nil()),
             Ok(_) => Ok(LoxObject::nil()),
@@ -48,7 +47,7 @@ impl LoxFunction {
 
     pub fn bind(self, instance: LoxInstance) -> Self {
         let enviroment = Enviroment::with_enclosing(self.closure);
-        enviroment.define("this".into(), LoxObject::instance(instance));
+        enviroment.define(LoxObject::instance(instance));
         LoxFunction::new(self.declaration, enviroment, self.is_initializer)
     }
 }

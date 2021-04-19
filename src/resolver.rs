@@ -63,10 +63,24 @@ impl Resolvable for [Stmt] {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Scope {
+    map: HashMap<String, (bool, usize)>,
+    var_cnt: usize,
+}
+
+impl Scope {
+    pub fn insert(&mut self, key: String, value: bool) {
+        let current_var_cnt = self.var_cnt;
+        self.map.insert(key, (value, current_var_cnt));
+        self.var_cnt += 1;
+    }
+}
+
 #[derive(Debug)]
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
-    scopes: Vec<HashMap<String, bool>>,
+    scopes: Vec<Scope>,
     current_function: FunctionKind,
     current_class: ClassKind,
     current_loop: LoopKind,
@@ -77,7 +91,7 @@ impl<'a> Resolver<'a> {
     pub fn new(interpreter: &'a mut Interpreter) -> Self {
         Self {
             interpreter,
-            scopes: vec![],
+            scopes: vec![Scope::default()],
             current_function: FunctionKind::None,
             current_class: ClassKind::None,
             current_loop: LoopKind::None,
@@ -104,7 +118,7 @@ impl<'a> Resolver<'a> {
 
     fn declare(&mut self, name: &Token) {
         if let Some(scope) = self.scopes.last_mut() {
-            if scope.contains_key(&name.lexeme) {
+            if scope.map.contains_key(&name.lexeme) {
                 self.error(
                     name.line,
                     "Already variable with this name in this scope.".into(),
@@ -116,15 +130,19 @@ impl<'a> Resolver<'a> {
     }
 
     fn define(&mut self, name: &Token) {
-        if let Some(b) = self.scopes.last_mut().and_then(|m| m.get_mut(&name.lexeme)) {
+        if let Some((b, _)) = self
+            .scopes
+            .last_mut()
+            .and_then(|s| s.map.get_mut(&name.lexeme))
+        {
             *b = true;
         }
     }
 
     fn resolve_local(&mut self, id: usize, name: &Token) {
-        for (distance, map) in self.scopes.iter().rev().enumerate() {
-            if map.contains_key(&name.lexeme) {
-                self.interpreter.resolve(id, distance);
+        for (distance, scope) in self.scopes.iter().rev().enumerate() {
+            if let Some(&(_, index)) = scope.map.get(&name.lexeme) {
+                self.interpreter.resolve(id, distance, index);
                 return;
             }
         }
@@ -164,12 +182,12 @@ impl ExprVisitor for Resolver<'_> {
     }
 
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
-        if self
-            .scopes
-            .last_mut()
-            .and_then(|m| m.get(&expr.name.lexeme))
-            == Some(&false)
-        {
+        if matches!(
+            self.scopes
+                .last_mut()
+                .and_then(|s| s.map.get(&expr.name.lexeme)),
+            Some(&(false, _))
+        ) {
             self.error(
                 expr.name.line,
                 "Can't read local variable in its own initializer.".into(),

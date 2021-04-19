@@ -18,20 +18,18 @@ use std::mem;
 #[derive(Debug, Default)]
 pub struct Interpreter {
     environment: Enviroment,
-    pub globals: Enviroment,
-    locals: HashMap<usize, usize>,
+    vars: HashMap<usize, (usize, usize)>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let environment = Enviroment::default();
-        environment.define(
-            "clock".to_string(),
-            LoxObject::callable(LoxCallable::clock()),
-        );
+        // environment.define(
+        //     "clock".to_string(),
+        //     LoxObject::callable(LoxCallable::clock()),
+        // );
 
         Self {
-            globals: environment.clone(),
             environment,
             ..Default::default()
         }
@@ -65,15 +63,18 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    pub fn resolve(&mut self, id: usize, distance: usize) {
-        self.locals.insert(id, distance);
+    pub fn resolve(&mut self, id: usize, distance: usize, index: usize) {
+        self.vars.insert(id, (distance, index));
     }
 
     fn lookup_variable(&mut self, id: usize, name: &Token) -> Result<LoxObject, ControlFlow> {
-        if let Some(distance) = self.locals.get(&id) {
-            Ok(self.environment.get_at(*distance, &name.lexeme))
+        if let Some(&(distance, index)) = self.vars.get(&id) {
+            Ok(self.environment.get_at(distance, index))
         } else {
-            self.globals.get(name)
+            Err(ControlFlow::abort(
+                name.line,
+                format!("Undefined variable '{}'.", name.lexeme),
+            ))
         }
     }
 }
@@ -155,11 +156,13 @@ impl ExprVisitor for Interpreter {
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
         let value = self.evaluate(&expr.value)?;
-        if let Some(distance) = self.locals.get(&expr.id) {
-            self.environment
-                .assign_at(*distance, &expr.name, value.clone())?;
+        if let Some(&(distance, index)) = self.vars.get(&expr.id) {
+            self.environment.assign_at(distance, index, value.clone());
         } else {
-            self.globals.assign(&expr.name, value.clone())?;
+            return Err(ControlFlow::abort(
+                expr.name.line,
+                format!("Undefined variable '{}'.", expr.name.lexeme),
+            ));
         }
 
         Ok(value)
@@ -256,9 +259,7 @@ impl StmtVisitor for Interpreter {
             .as_ref()
             .map_or_else(|| Ok(LoxObject::nil()), |expr| self.evaluate(expr))?;
 
-        // FIXME: Remove this clone
-        self.environment
-            .define(stmt.name.lexeme.clone(), initializer);
+        self.environment.define(initializer);
         Ok(())
     }
 
@@ -302,7 +303,8 @@ impl StmtVisitor for Interpreter {
             self.environment.clone(),
             false,
         ));
-        self.environment.define(stmt.name.lexeme.clone(), function);
+        self.environment.define(function);
+
         Ok(())
     }
 
@@ -312,8 +314,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
-        self.environment
-            .define(stmt.name.lexeme.clone(), LoxObject::nil());
+        let index = self.environment.define(LoxObject::nil());
 
         let mut methods = HashMap::new();
         for method in &stmt.methods {
@@ -324,7 +325,7 @@ impl StmtVisitor for Interpreter {
         }
 
         let class = LoxObject::callable(LoxCallable::class(stmt.name.lexeme.clone(), methods));
-        self.environment.assign(&stmt.name, class)?;
+        self.environment.assign_at(0, index, class);
 
         Ok(())
     }
