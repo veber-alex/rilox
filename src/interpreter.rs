@@ -17,17 +17,13 @@ use std::mem;
 
 #[derive(Debug, Default)]
 pub struct Interpreter {
-    environment: Enviroment,
+    pub environment: Enviroment,
     vars: HashMap<usize, (usize, usize)>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let environment = Enviroment::default();
-        // environment.define(
-        //     "clock".to_string(),
-        //     LoxObject::callable(LoxCallable::clock()),
-        // );
 
         Self {
             environment,
@@ -265,9 +261,7 @@ impl ExprVisitor for Interpreter {
             )
         })?;
 
-        Ok(LoxObject::Callable(LoxCallable::function_from(
-            method.bind(instance),
-        )))
+        Ok(method.bind(instance).into())
     }
 }
 
@@ -330,11 +324,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunStmt) -> Self::Output {
-        let function = LoxObject::callable(LoxCallable::function(
-            stmt.clone(),
-            self.environment.clone(),
-            false,
-        ));
+        let function = LoxObject::function(stmt.clone(), self.environment.clone(), false);
         self.environment.define(function);
 
         Ok(())
@@ -366,10 +356,7 @@ impl StmtVisitor for Interpreter {
         let enclosing = if let Some(superclass) = &superclass {
             let enclosing = self.environment.clone();
             self.environment = Enviroment::with_enclosing(enclosing.clone());
-            self.environment
-                .define(LoxObject::callable(LoxCallable::class_from(
-                    superclass.clone(),
-                )));
+            self.environment.define(superclass.clone().into());
             Some(enclosing)
         } else {
             None
@@ -383,11 +370,7 @@ impl StmtVisitor for Interpreter {
             methods.insert(method.name.lexeme.clone(), function);
         }
 
-        let class = LoxObject::callable(LoxCallable::class(
-            stmt.name.lexeme.clone(),
-            superclass,
-            methods,
-        ));
+        let class = LoxObject::class(stmt.name.lexeme.clone(), superclass, methods);
 
         if let Some(enclosing) = enclosing {
             self.environment = enclosing

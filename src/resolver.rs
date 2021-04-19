@@ -80,8 +80,8 @@ impl Scope {
 
 #[derive(Debug)]
 pub struct Resolver<'a> {
-    interpreter: &'a mut Interpreter,
-    scopes: Vec<Scope>,
+    pub interpreter: &'a mut Interpreter,
+    pub scopes: Vec<Scope>,
     current_function: FunctionKind,
     current_class: ClassKind,
     current_loop: LoopKind,

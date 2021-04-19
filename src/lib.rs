@@ -1,6 +1,7 @@
 #![deny(rust_2018_idioms)]
 
 use interpreter::Interpreter;
+use model::builtins::install_builtins;
 use parser::Parser;
 use resolver::Resolver;
 use scanner::Scanner;
@@ -75,6 +76,7 @@ impl Rilox {
         // FIXME: This is ugly
         let mut interpreter = Interpreter::new();
         let mut resolver = Resolver::new(&mut interpreter);
+        install_builtins(&mut resolver);
         resolver.resolve(&*stmts);
         if resolver.had_error {
             process::exit(64)
