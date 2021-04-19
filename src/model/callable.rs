@@ -27,8 +27,20 @@ impl LoxCallable {
         Self::Function(LoxFunction::new(declaration, closure, is_initializer))
     }
 
-    pub fn class(name: String, methods: HashMap<String, LoxFunction>) -> LoxCallable {
-        Self::Class(LoxClass::new(name, methods))
+    pub fn class(
+        name: String,
+        superclass: Option<LoxClass>,
+        methods: HashMap<String, LoxFunction>,
+    ) -> LoxCallable {
+        Self::Class(LoxClass::new(name, superclass, methods))
+    }
+
+    pub fn class_from(class: LoxClass) -> LoxCallable {
+        Self::Class(class)
+    }
+
+    pub fn function_from(func: LoxFunction) -> LoxCallable {
+        Self::Function(func)
     }
 }
 

@@ -9,6 +9,7 @@ use std::rc::Rc;
 #[derive(Debug)]
 pub struct LoxClassInner {
     pub name: Box<str>,
+    pub superclass: Option<LoxClass>,
     pub methods: HashMap<String, LoxFunction>,
 }
 
@@ -16,16 +17,25 @@ pub struct LoxClassInner {
 pub struct LoxClass(pub Rc<LoxClassInner>);
 
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> Self {
+    pub fn new(
+        name: String,
+        superclass: Option<Self>,
+        methods: HashMap<String, LoxFunction>,
+    ) -> Self {
         let inner = LoxClassInner {
             name: name.into(),
+            superclass,
             methods,
         };
         Self(Rc::new(inner))
     }
 
     pub fn find_method(&self, name: &str) -> Option<LoxFunction> {
-        self.0.methods.get(name).cloned()
+        self.0
+            .methods
+            .get(name)
+            .cloned()
+            .or_else(|| self.0.superclass.as_ref().and_then(|c| c.find_method(name)))
     }
 
     pub fn call(

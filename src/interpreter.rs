@@ -1,7 +1,7 @@
 use crate::enviroment::Enviroment;
 use crate::expr::{
     AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GetExpr, GroupingExpr, LiteralExpr,
-    LogicalExpr, SetExpr, ThisExpr, UnaryExpr, VariableExpr,
+    LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
 use crate::model::callable::LoxCallable;
 use crate::model::function::LoxFunction;
@@ -61,6 +61,10 @@ impl Interpreter {
 
     fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject, ControlFlow> {
         expr.accept(self)
+    }
+
+    fn evaluate_variable(&mut self, expr: &VariableExpr) -> Result<LoxObject, ControlFlow> {
+        self.visit_variable_expr(expr)
     }
 
     pub fn resolve(&mut self, id: usize, distance: usize, index: usize) {
@@ -237,6 +241,34 @@ impl ExprVisitor for Interpreter {
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
         self.lookup_variable(expr.id, &expr.keyword)
     }
+
+    fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output {
+        let &(distance, index) = self
+            .vars
+            .get(&expr.id)
+            .expect("super in class without super");
+
+        let superclass = match self.environment.get_at(distance, index) {
+            LoxObject::Callable(LoxCallable::Class(cls)) => cls,
+            _ => panic!("super outside of class"),
+        };
+
+        let instance = match self.environment.get_at(distance - 1, 0) {
+            LoxObject::Instance(inst) => inst,
+            _ => panic!("unbound method"),
+        };
+
+        let method = superclass.find_method(&expr.method.lexeme).ok_or_else(|| {
+            ControlFlow::abort(
+                expr.method.line,
+                format!("Undefined property '{}'", expr.method.lexeme),
+            )
+        })?;
+
+        Ok(LoxObject::Callable(LoxCallable::function_from(
+            method.bind(instance),
+        )))
+    }
 }
 
 impl StmtVisitor for Interpreter {
@@ -314,7 +346,34 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
+        let superclass = if let Some(var_expr) = &stmt.superclass {
+            if let LoxObject::Callable(LoxCallable::Class(superclass)) =
+                self.evaluate_variable(var_expr)?
+            {
+                Some(superclass)
+            } else {
+                return Err(ControlFlow::abort(
+                    var_expr.name.line,
+                    "Superclass must be a class.".into(),
+                ));
+            }
+        } else {
+            None
+        };
+
         let index = self.environment.define(LoxObject::nil());
+
+        let enclosing = if let Some(superclass) = &superclass {
+            let enclosing = self.environment.clone();
+            self.environment = Enviroment::with_enclosing(enclosing.clone());
+            self.environment
+                .define(LoxObject::callable(LoxCallable::class_from(
+                    superclass.clone(),
+                )));
+            Some(enclosing)
+        } else {
+            None
+        };
 
         let mut methods = HashMap::new();
         for method in &stmt.methods {
@@ -324,7 +383,16 @@ impl StmtVisitor for Interpreter {
             methods.insert(method.name.lexeme.clone(), function);
         }
 
-        let class = LoxObject::callable(LoxCallable::class(stmt.name.lexeme.clone(), methods));
+        let class = LoxObject::callable(LoxCallable::class(
+            stmt.name.lexeme.clone(),
+            superclass,
+            methods,
+        ));
+
+        if let Some(enclosing) = enclosing {
+            self.environment = enclosing
+        }
+
         self.environment.assign_at(0, index, class);
 
         Ok(())

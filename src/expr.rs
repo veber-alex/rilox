@@ -24,6 +24,7 @@ pub trait ExprVisitor {
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output;
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output;
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output;
+    fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -102,6 +103,13 @@ pub struct ThisExpr {
 }
 
 #[derive(Debug)]
+pub struct SuperExpr {
+    pub keyword: Token,
+    pub method: Token,
+    pub id: usize,
+}
+
+#[derive(Debug)]
 pub enum Expr {
     Binary(Box<BinaryExpr>),
     Grouping(Box<GroupingExpr>),
@@ -114,6 +122,7 @@ pub enum Expr {
     Get(Box<GetExpr>),
     Set(Box<SetExpr>),
     This(ThisExpr),
+    Super(SuperExpr),
 }
 
 impl Expr {
@@ -130,6 +139,7 @@ impl Expr {
             Expr::Get(e) => visitor.visit_get_expr(e),
             Expr::Set(e) => visitor.visit_set_expr(e),
             Expr::This(e) => visitor.visit_this_expr(e),
+            Expr::Super(e) => visitor.visit_super_expr(e),
         }
     }
 
@@ -191,5 +201,13 @@ impl Expr {
 
     pub fn this(keyword: Token) -> Expr {
         Expr::This(ThisExpr { keyword, id: uid() })
+    }
+
+    pub fn super_expr(keyword: Token, method: Token) -> Self {
+        Expr::Super(SuperExpr {
+            keyword,
+            method,
+            id: uid(),
+        })
     }
 }

@@ -1,6 +1,6 @@
 use crate::expr::{
     AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GetExpr, GroupingExpr, LiteralExpr,
-    LogicalExpr, SetExpr, ThisExpr, UnaryExpr, VariableExpr,
+    LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
 use crate::interpreter::Interpreter;
 use crate::report_error;
@@ -25,6 +25,7 @@ enum FunctionKind {
 enum ClassKind {
     None,
     Class,
+    Subclass,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -234,6 +235,20 @@ impl ExprVisitor for Resolver<'_> {
             )
         }
     }
+
+    fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output {
+        match self.current_class {
+            ClassKind::None => self.error(
+                expr.keyword.line,
+                "Can't use 'super' outside of a class.".into(),
+            ),
+            ClassKind::Class => self.error(
+                expr.keyword.line,
+                "Can't use 'super' in a class with no superclass.".into(),
+            ),
+            ClassKind::Subclass => self.resolve_local(expr.id, &expr.keyword),
+        }
+    }
 }
 
 impl StmtVisitor for Resolver<'_> {
@@ -315,21 +330,36 @@ impl StmtVisitor for Resolver<'_> {
     fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
         let enclosing_class = mem::replace(&mut self.current_class, ClassKind::Class);
 
+        // Class name
         self.declare(&stmt.name);
         self.define(&stmt.name);
 
+        // Class superclass
         if let Some(expr) = &stmt.superclass {
+            self.current_class = ClassKind::Subclass;
             if stmt.name.lexeme == expr.name.lexeme {
                 self.error(expr.name.line, "A class can't inherit from itself.".into())
             }
             self.resolve(expr);
         }
 
+        // Scope for 'super'
+        if stmt.superclass.is_some() {
+            self.begin_scope();
+
+            self.scopes
+                .last_mut()
+                .expect("Empty scopes")
+                .insert("super".into(), true)
+        }
+
+        // Scope for class methods
         self.begin_scope();
 
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert("this".into(), true);
-        }
+        self.scopes
+            .last_mut()
+            .expect("Empty scopes")
+            .insert("this".into(), true);
 
         for method in &stmt.methods {
             let declaration = if method.name.lexeme == "init" {
@@ -341,6 +371,10 @@ impl StmtVisitor for Resolver<'_> {
         }
 
         self.end_scope();
+
+        if stmt.superclass.is_some() {
+            self.end_scope();
+        }
 
         self.current_class = enclosing_class;
     }

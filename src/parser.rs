@@ -399,6 +399,11 @@ impl Parser {
                 self.verify(RightParen, "Expect ')' after expression.")?;
                 Expr::grouping(expr)
             }
+            Super => {
+                self.verify(Dot, "Expect '.' after 'super'.")?;
+                let method = self.verify(Identifier, "Expect superclass method name.")?;
+                Expr::super_expr(token, method)
+            }
             _ => return Err(Self::error(&token, "Syntax Error")),
         };
 
