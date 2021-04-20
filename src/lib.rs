@@ -75,8 +75,8 @@ impl Rilox {
         // Resolving
         // FIXME: This is ugly
         let mut interpreter = Interpreter::new();
-        let mut resolver = Resolver::new(&mut interpreter);
-        install_builtins(&mut resolver);
+        let mut resolver = Resolver::new();
+        install_builtins(&mut interpreter, &mut resolver);
         resolver.resolve(&*stmts);
         if resolver.had_error {
             process::exit(64)

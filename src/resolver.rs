@@ -1,8 +1,7 @@
 use crate::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GetExpr, GroupingExpr, LiteralExpr,
-    LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, GetExpr, GroupingExpr,
+    LiteralExpr, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
-use crate::interpreter::Interpreter;
 use crate::report_error;
 use crate::stmt::{
     BlockStmt, BreakStmt, ClassStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
@@ -35,29 +34,29 @@ enum LoopKind {
 }
 
 pub trait Resolvable {
-    fn resolve(&self, resolver: &mut Resolver<'_>);
+    fn resolve(&self, resolver: &mut Resolver);
 }
 
 impl Resolvable for Stmt {
-    fn resolve(&self, resolver: &mut Resolver<'_>) {
+    fn resolve(&self, resolver: &mut Resolver) {
         self.accept(resolver)
     }
 }
 
 impl Resolvable for Expr {
-    fn resolve(&self, resolver: &mut Resolver<'_>) {
+    fn resolve(&self, resolver: &mut Resolver) {
         self.accept(resolver)
     }
 }
 
 impl Resolvable for VariableExpr {
-    fn resolve(&self, resolver: &mut Resolver<'_>) {
+    fn resolve(&self, resolver: &mut Resolver) {
         resolver.visit_variable_expr(self)
     }
 }
 
 impl Resolvable for [Stmt] {
-    fn resolve(&self, resolver: &mut Resolver<'_>) {
+    fn resolve(&self, resolver: &mut Resolver) {
         for stmt in self {
             stmt.accept(resolver);
         }
@@ -79,8 +78,7 @@ impl Scope {
 }
 
 #[derive(Debug)]
-pub struct Resolver<'a> {
-    pub interpreter: &'a mut Interpreter,
+pub struct Resolver {
     pub scopes: Vec<Scope>,
     current_function: FunctionKind,
     current_class: ClassKind,
@@ -88,10 +86,9 @@ pub struct Resolver<'a> {
     pub had_error: bool,
 }
 
-impl<'a> Resolver<'a> {
-    pub fn new(interpreter: &'a mut Interpreter) -> Self {
+impl Resolver {
+    pub fn new() -> Self {
         Self {
-            interpreter,
             scopes: vec![Scope::default()],
             current_function: FunctionKind::None,
             current_class: ClassKind::None,
@@ -141,10 +138,13 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_local(&mut self, id: usize, name: &Token) {
+    fn resolve_local<EXPR>(&mut self, expr: &EXPR, name: &Token)
+    where
+        EXPR: ExprHasLocation,
+    {
         for (distance, scope) in self.scopes.iter().rev().enumerate() {
-            if let Some(&(_, index)) = scope.map.get(&name.lexeme) {
-                self.interpreter.resolve(id, distance, index);
+            if let Some(&(true, index)) = scope.map.get(&name.lexeme) {
+                expr.set_location(distance, index);
                 return;
             }
         }
@@ -165,7 +165,7 @@ impl<'a> Resolver<'a> {
     }
 }
 
-impl ExprVisitor for Resolver<'_> {
+impl ExprVisitor for Resolver {
     type Output = ();
 
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
@@ -184,24 +184,12 @@ impl ExprVisitor for Resolver<'_> {
     }
 
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
-        if matches!(
-            self.scopes
-                .last_mut()
-                .and_then(|s| s.map.get(&expr.name.lexeme)),
-            Some(&(false, _))
-        ) {
-            self.error(
-                expr.name.line,
-                "Can't read local variable in its own initializer.".into(),
-            )
-        }
-
-        self.resolve_local(expr.id, &expr.name);
+        self.resolve_local(expr, &expr.name);
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
         self.resolve(&expr.value);
-        self.resolve_local(expr.id, &expr.name);
+        self.resolve_local(expr, &expr.name);
     }
 
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output {
@@ -228,7 +216,7 @@ impl ExprVisitor for Resolver<'_> {
 
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
         if self.current_class == ClassKind::Class {
-            self.resolve_local(expr.id, &expr.keyword)
+            self.resolve_local(expr, &expr.keyword)
         } else {
             self.error(
                 expr.keyword.line,
@@ -247,12 +235,12 @@ impl ExprVisitor for Resolver<'_> {
                 expr.keyword.line,
                 "Can't use 'super' in a class with no superclass.".into(),
             ),
-            ClassKind::Subclass => self.resolve_local(expr.id, &expr.keyword),
+            ClassKind::Subclass => self.resolve_local(expr, &expr.keyword),
         }
     }
 }
 
-impl StmtVisitor for Resolver<'_> {
+impl StmtVisitor for Resolver {
     type Output = ();
 
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {

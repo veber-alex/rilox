@@ -27,6 +27,31 @@ pub trait ExprVisitor {
     fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output;
 }
 
+pub trait ExprHasLocation {
+    fn location_cell_ref(&self) -> &Cell<Option<Location>>;
+
+    fn get_location(&self) -> Option<Location> {
+        self.location_cell_ref().get()
+    }
+
+    fn set_location(&self, distance: usize, index: usize) {
+        self.location_cell_ref()
+            .set(Some(Location::new(distance, index)))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Location {
+    pub distance: usize,
+    pub index: usize,
+}
+
+impl Location {
+    pub fn new(distance: usize, index: usize) -> Self {
+        Self { distance, index }
+    }
+}
+
 #[derive(Debug)]
 pub struct BinaryExpr {
     pub left: Expr,
@@ -54,11 +79,22 @@ pub struct UnaryExpr {
 pub struct VariableExpr {
     pub name: Token,
     pub id: usize,
+    location: Cell<Option<Location>>,
 }
 
 impl VariableExpr {
     pub fn new(name: Token) -> Self {
-        Self { name, id: uid() }
+        Self {
+            name,
+            id: uid(),
+            location: Default::default(),
+        }
+    }
+}
+
+impl ExprHasLocation for VariableExpr {
+    fn location_cell_ref(&self) -> &Cell<Option<Location>> {
+        &self.location
     }
 }
 
@@ -67,6 +103,13 @@ pub struct AssignExpr {
     pub name: Token,
     pub value: Expr,
     pub id: usize,
+    location: Cell<Option<Location>>,
+}
+
+impl ExprHasLocation for AssignExpr {
+    fn location_cell_ref(&self) -> &Cell<Option<Location>> {
+        &self.location
+    }
 }
 
 #[derive(Debug)]
@@ -100,6 +143,13 @@ pub struct SetExpr {
 pub struct ThisExpr {
     pub keyword: Token,
     pub id: usize,
+    location: Cell<Option<Location>>,
+}
+
+impl ExprHasLocation for ThisExpr {
+    fn location_cell_ref(&self) -> &Cell<Option<Location>> {
+        &self.location
+    }
 }
 
 #[derive(Debug)]
@@ -107,6 +157,13 @@ pub struct SuperExpr {
     pub keyword: Token,
     pub method: Token,
     pub id: usize,
+    location: Cell<Option<Location>>,
+}
+
+impl ExprHasLocation for SuperExpr {
+    fn location_cell_ref(&self) -> &Cell<Option<Location>> {
+        &self.location
+    }
 }
 
 #[derive(Debug)]
@@ -168,7 +225,12 @@ impl Expr {
     }
 
     pub fn assign(name: Token, value: Expr, id: usize) -> Expr {
-        Expr::Assign(Box::new(AssignExpr { name, value, id }))
+        Expr::Assign(Box::new(AssignExpr {
+            name,
+            value,
+            id,
+            location: Default::default(),
+        }))
     }
 
     pub fn logical(left: Expr, operator: Token, right: Expr) -> Expr {
@@ -200,7 +262,11 @@ impl Expr {
     }
 
     pub fn this(keyword: Token) -> Expr {
-        Expr::This(ThisExpr { keyword, id: uid() })
+        Expr::This(ThisExpr {
+            keyword,
+            id: uid(),
+            location: Default::default(),
+        })
     }
 
     pub fn super_expr(keyword: Token, method: Token) -> Self {
@@ -208,6 +274,7 @@ impl Expr {
             keyword,
             method,
             id: uid(),
+            location: Default::default(),
         })
     }
 }

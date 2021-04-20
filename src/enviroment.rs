@@ -1,3 +1,4 @@
+use crate::expr::Location;
 use crate::model::object::LoxObject;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -35,32 +36,32 @@ impl Enviroment {
         enviroment.expect("Enviroment at distance not found")
     }
 
-    pub fn get_at(&self, distance: usize, index: usize) -> LoxObject {
-        self.ancestor(distance)
+    pub fn get_at(&self, loc: Location) -> LoxObject {
+        self.ancestor(loc.distance)
             .0
             .values
             .borrow()
-            .get(index)
+            .get(loc.index)
             .unwrap_or_else(|| {
                 panic!(
                     "Resolved variable not found. distance: {:?},  index: {:?}",
-                    distance, index
+                    loc.distance, loc.index
                 )
             })
             .clone()
     }
 
-    pub fn assign_at(&self, distance: usize, index: usize, value: LoxObject) {
+    pub fn assign_at(&self, loc: Location, value: LoxObject) {
         *self
-            .ancestor(distance)
+            .ancestor(loc.distance)
             .0
             .values
             .borrow_mut()
-            .get_mut(index)
+            .get_mut(loc.index)
             .unwrap_or_else(|| {
                 panic!(
                     "Resolved variable not found. distance: {:?},  index: {:?}",
-                    distance, index
+                    loc.distance, loc.index
                 )
             }) = value;
     }

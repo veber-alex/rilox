@@ -1,7 +1,7 @@
 use crate::enviroment::Enviroment;
 use crate::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, ExprVisitor, GetExpr, GroupingExpr, LiteralExpr,
-    LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, GetExpr, GroupingExpr,
+    LiteralExpr, Location, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
 use crate::model::callable::LoxCallable;
 use crate::model::function::LoxFunction;
@@ -18,17 +18,11 @@ use std::mem;
 #[derive(Debug, Default)]
 pub struct Interpreter {
     pub environment: Enviroment,
-    vars: HashMap<usize, (usize, usize)>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let environment = Enviroment::default();
-
-        Self {
-            environment,
-            ..Default::default()
-        }
+        Default::default()
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Option<()> {
@@ -59,17 +53,12 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn evaluate_variable(&mut self, expr: &VariableExpr) -> Result<LoxObject, ControlFlow> {
-        self.visit_variable_expr(expr)
-    }
-
-    pub fn resolve(&mut self, id: usize, distance: usize, index: usize) {
-        self.vars.insert(id, (distance, index));
-    }
-
-    fn lookup_variable(&mut self, id: usize, name: &Token) -> Result<LoxObject, ControlFlow> {
-        if let Some(&(distance, index)) = self.vars.get(&id) {
-            Ok(self.environment.get_at(distance, index))
+    fn lookup_variable<EXPR>(&mut self, expr: &EXPR, name: &Token) -> Result<LoxObject, ControlFlow>
+    where
+        EXPR: ExprHasLocation,
+    {
+        if let Some(loc) = expr.get_location() {
+            Ok(self.environment.get_at(loc))
         } else {
             Err(ControlFlow::abort(
                 name.line,
@@ -151,13 +140,13 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
-        self.lookup_variable(expr.id, &expr.name)
+        self.lookup_variable(expr, &expr.name)
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
         let value = self.evaluate(&expr.value)?;
-        if let Some(&(distance, index)) = self.vars.get(&expr.id) {
-            self.environment.assign_at(distance, index, value.clone());
+        if let Some(loc) = expr.get_location() {
+            self.environment.assign_at(loc, value.clone());
         } else {
             return Err(ControlFlow::abort(
                 expr.name.line,
@@ -235,21 +224,19 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
-        self.lookup_variable(expr.id, &expr.keyword)
+        self.lookup_variable(expr, &expr.keyword)
     }
 
     fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output {
-        let &(distance, index) = self
-            .vars
-            .get(&expr.id)
-            .expect("super in class without super");
+        let loc = expr.get_location().expect("super in class without super");
 
-        let superclass = match self.environment.get_at(distance, index) {
+        let superclass = match self.environment.get_at(loc) {
             LoxObject::Callable(LoxCallable::Class(cls)) => cls,
             _ => panic!("super outside of class"),
         };
 
-        let instance = match self.environment.get_at(distance - 1, 0) {
+        let inst_loc = Location::new(loc.distance - 1, 0);
+        let instance = match self.environment.get_at(inst_loc) {
             LoxObject::Instance(inst) => inst,
             _ => panic!("unbound method"),
         };
@@ -338,7 +325,7 @@ impl StmtVisitor for Interpreter {
     fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
         let superclass = if let Some(var_expr) = &stmt.superclass {
             if let LoxObject::Callable(LoxCallable::Class(superclass)) =
-                self.evaluate_variable(var_expr)?
+                self.visit_variable_expr(var_expr)?
             {
                 Some(superclass)
             } else {
@@ -376,7 +363,8 @@ impl StmtVisitor for Interpreter {
             self.environment = enclosing
         }
 
-        self.environment.assign_at(0, index, class);
+        let loc = Location::new(0, index);
+        self.environment.assign_at(loc, class);
 
         Ok(())
     }

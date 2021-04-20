@@ -34,12 +34,12 @@ impl Display for Clock {
     }
 }
 
-pub fn install_builtins(resolver: &mut Resolver<'_>) {
+pub fn install_builtins(interpreter: &mut Interpreter, resolver: &mut Resolver) {
     let clock: &'static dyn BuiltinFn = &Clock;
 
     let builtins = [clock];
     for obj in array::IntoIter::new(builtins) {
         resolver.scopes[0].insert(obj.name().to_string(), true);
-        resolver.interpreter.environment.define(obj.into());
+        interpreter.environment.define(obj.into());
     }
 }
