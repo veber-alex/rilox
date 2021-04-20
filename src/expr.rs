@@ -25,6 +25,7 @@ pub trait ExprVisitor {
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output;
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output;
     fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output;
+    fn visit_fstring_expr(&mut self, expr: &FstringExpr) -> Self::Output;
 }
 
 pub trait ExprHasLocation {
@@ -167,6 +168,11 @@ impl ExprHasLocation for SuperExpr {
 }
 
 #[derive(Debug)]
+pub struct FstringExpr {
+    pub string: Vec<Expr>,
+}
+
+#[derive(Debug)]
 pub enum Expr {
     Binary(Box<BinaryExpr>),
     Grouping(Box<GroupingExpr>),
@@ -180,6 +186,7 @@ pub enum Expr {
     Set(Box<SetExpr>),
     This(ThisExpr),
     Super(SuperExpr),
+    Fstring(FstringExpr),
 }
 
 impl Expr {
@@ -197,6 +204,7 @@ impl Expr {
             Expr::Set(e) => visitor.visit_set_expr(e),
             Expr::This(e) => visitor.visit_this_expr(e),
             Expr::Super(e) => visitor.visit_super_expr(e),
+            Expr::Fstring(e) => visitor.visit_fstring_expr(e),
         }
     }
 
@@ -276,5 +284,9 @@ impl Expr {
             id: uid(),
             location: Default::default(),
         })
+    }
+
+    pub fn fstring(string: Vec<Expr>) -> Self {
+        Expr::Fstring(FstringExpr { string })
     }
 }

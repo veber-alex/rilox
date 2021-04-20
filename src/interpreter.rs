@@ -1,7 +1,8 @@
 use crate::enviroment::Enviroment;
 use crate::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, GetExpr, GroupingExpr,
-    LiteralExpr, Location, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, FstringExpr, GetExpr,
+    GroupingExpr, LiteralExpr, Location, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr,
+    VariableExpr,
 };
 use crate::model::callable::LoxCallable;
 use crate::model::function::LoxFunction;
@@ -249,6 +250,17 @@ impl ExprVisitor for Interpreter {
         })?;
 
         Ok(method.bind(instance).into())
+    }
+
+    fn visit_fstring_expr(&mut self, expr: &FstringExpr) -> Self::Output {
+        use std::fmt::Write;
+
+        let mut output = String::new();
+        for subexpr in &expr.string {
+            let _ = write!(&mut output, "{}", self.evaluate(subexpr)?);
+        }
+
+        Ok(LoxObject::string(&output))
     }
 }
 

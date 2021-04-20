@@ -103,6 +103,7 @@ impl<'a> Scanner<'a> {
                     }
                 }
                 '"' => self.string(),
+                'f' if self.advance_if_eq('"') => self.fstring(),
                 number!() => self.number(),
                 alpha!() => self.identifier(),
                 ' ' | '\r' | '\t' => (),
@@ -176,6 +177,45 @@ impl<'a> Scanner<'a> {
         self.advance();
 
         self.add_token(TokenKind::Str);
+    }
+
+    fn fstring(&mut self) {
+        self.add_token(TokenKind::FstringStart);
+        self.start = self.current;
+
+        while matches!(self.peek(), Some(c) if c != '"') {
+            if self.peek() == Some('\n') {
+                self.line += 1;
+            }
+
+            self.advance_while(|c| c != '{');
+            if self.current > self.start {
+                self.add_token(TokenKind::Str);
+                self.start = self.current;
+            }
+
+            if self.peek() == Some('{') {
+                self.advance_while(|c| c != '}');
+                self.advance();
+                // FIXME: make recursive + error handling + escaping
+                let scanner = Scanner::new(&self.source[self.start..self.current]);
+                let (mut tokens, _) = scanner.scan_tokens();
+                // Remove Eof
+                tokens.pop();
+                self.tokens.extend(tokens);
+                self.start = self.current;
+            }
+        }
+
+        if self.peek().is_none() {
+            self.error(self.line, "Unterminated fstring.");
+            return;
+        }
+
+        // The closing '"'
+        self.advance();
+
+        self.add_token(TokenKind::FstringEnd);
     }
 
     fn number(&mut self) {

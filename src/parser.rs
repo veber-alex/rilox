@@ -404,6 +404,24 @@ impl Parser {
                 let method = self.verify(Identifier, "Expect superclass method name.")?;
                 Expr::super_expr(token, method)
             }
+            FstringStart => {
+                let mut parts = vec![];
+                loop {
+                    if self.eat(FstringEnd) {
+                        break;
+                    }
+
+                    if let Some(token) = self.get(Str) {
+                        parts.push(Expr::literal(LoxObject::string(&token.lexeme)))
+                    }
+
+                    if self.eat(LeftBrace) {
+                        parts.push(self.expression()?);
+                        self.verify(RightBrace, "Expected '}' after expression")?;
+                    }
+                }
+                Expr::fstring(parts)
+            }
             _ => return Err(Self::error(&token, "Syntax Error")),
         };
 

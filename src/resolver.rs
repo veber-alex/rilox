@@ -1,6 +1,6 @@
 use crate::expr::{
-    AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, GetExpr, GroupingExpr,
-    LiteralExpr, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
+    AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, FstringExpr, GetExpr,
+    GroupingExpr, LiteralExpr, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
 };
 use crate::report_error;
 use crate::stmt::{
@@ -236,6 +236,12 @@ impl ExprVisitor for Resolver {
                 "Can't use 'super' in a class with no superclass.".into(),
             ),
             ClassKind::Subclass => self.resolve_local(expr, &expr.keyword),
+        }
+    }
+
+    fn visit_fstring_expr(&mut self, expr: &FstringExpr) -> Self::Output {
+        for subexpr in &expr.string {
+            self.resolve(subexpr)
         }
     }
 }
