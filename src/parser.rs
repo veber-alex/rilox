@@ -266,7 +266,7 @@ impl Parser {
             let value = self.assignment()?;
             // verify l-value is a variable or get expression
             match expr {
-                Expr::Variable(var) => Ok(Expr::assign(var.name, value, var.id)),
+                Expr::Variable(var) => Ok(Expr::assign(var.name, value)),
                 Expr::Get(get) => Ok(Expr::set(get.object, get.name, value)),
                 _ => Err(Self::error(&token, "Invalid assignment target.")),
             }
@@ -391,7 +391,9 @@ impl Parser {
             Number => Expr::literal(LoxObject::number(
                 token.lexeme.parse().expect("Incorrect Token for f64"),
             )),
-            Str => Expr::literal(LoxObject::string(&token.lexeme[1..token.lexeme.len() - 1])),
+            Str => Expr::literal(LoxObject::string(
+                token.lexeme[1..token.lexeme.len() - 1].into(),
+            )),
             Identifier => Expr::variable(token),
             This => Expr::this(token),
             LeftParen => {
@@ -412,7 +414,7 @@ impl Parser {
                     }
 
                     if let Some(token) = self.get(Str) {
-                        parts.push(Expr::literal(LoxObject::string(&token.lexeme)))
+                        parts.push(Expr::literal(LoxObject::string(token.lexeme)))
                     }
 
                     if self.eat(LeftBrace) {

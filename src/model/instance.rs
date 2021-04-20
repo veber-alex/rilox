@@ -12,7 +12,7 @@ use std::rc::Rc;
 pub struct LoxInstance {
     pub class: LoxClass,
     // TODO: Replace this Rc with Gc to collect cycles
-    pub fields: Rc<RefCell<HashMap<String, LoxObject>>>,
+    pub fields: Rc<RefCell<HashMap<Rc<str>, LoxObject>>>,
 }
 
 impl LoxInstance {
@@ -25,7 +25,7 @@ impl LoxInstance {
 
     pub fn get(&self, token: &Token) -> Result<LoxObject, ControlFlow> {
         // property from instance
-        if let Some(obj) = self.fields.borrow().get(&token.lexeme).cloned() {
+        if let Some(obj) = self.fields.borrow().get(&*token.lexeme).cloned() {
             return Ok(obj);
         }
 
@@ -54,6 +54,10 @@ impl Display for LoxInstance {
 
 impl PartialEq for LoxInstance {
     fn eq(&self, other: &Self) -> bool {
+        // compare the Rc pointer address, otherwise 2 instances from the same class
+        // with the same fields will compare as equal.
         std::ptr::eq(&*self.fields, &*other.fields)
     }
 }
+
+impl Eq for LoxInstance {}

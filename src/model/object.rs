@@ -32,8 +32,8 @@ impl LoxObject {
         Self::Bool(value)
     }
 
-    pub fn string(value: &str) -> LoxObject {
-        Self::String(Rc::from(value))
+    pub fn string(value: Rc<str>) -> LoxObject {
+        Self::String(value)
     }
 
     pub fn instance(instance: LoxInstance) -> LoxObject {
@@ -49,9 +49,9 @@ impl LoxObject {
     }
 
     pub fn class(
-        name: String,
+        name: Rc<str>,
         superclass: Option<LoxClass>,
-        methods: HashMap<String, LoxFunction>,
+        methods: HashMap<Rc<str>, LoxFunction>,
     ) -> LoxObject {
         LoxObject::Callable(LoxCallable::Class(LoxClass::new(name, superclass, methods)))
     }

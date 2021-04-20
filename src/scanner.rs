@@ -43,8 +43,7 @@ impl<'a> Scanner<'a> {
             self.start = self.current;
             self.scan_token()
         }
-        self.tokens
-            .push(Token::new(TokenKind::Eof, "".to_string(), self.line));
+        self.tokens.push(Token::new(TokenKind::Eof, "", self.line));
 
         (self.tokens, self.had_error)
     }
@@ -268,8 +267,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn add_token(&mut self, ttype: TokenKind) {
-        // FIXME: Remove to_string
-        let text = self.source[self.start..self.current].to_string();
+        let text = &self.source[self.start..self.current];
         self.tokens.push(Token::new(ttype, text, self.line))
     }
 

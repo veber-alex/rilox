@@ -103,7 +103,7 @@ impl ExprVisitor for Interpreter {
                     Ok(LoxObject::number(lvalue + rvalue))
                 }
                 (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
-                    Ok(LoxObject::string(&format!("{}{}", lvalue, rvalue)))
+                    Ok(LoxObject::string(format!("{}{}", lvalue, rvalue).into()))
                 }
                 _ => Err(ControlFlow::abort(
                     expr.operator.line,
@@ -260,7 +260,7 @@ impl ExprVisitor for Interpreter {
             let _ = write!(&mut output, "{}", self.evaluate(subexpr)?);
         }
 
-        Ok(LoxObject::string(&output))
+        Ok(LoxObject::string(output.into()))
     }
 }
 
@@ -363,7 +363,7 @@ impl StmtVisitor for Interpreter {
 
         let mut methods = HashMap::new();
         for method in &stmt.methods {
-            let is_initializer = method.name.lexeme == "init";
+            let is_initializer = &*method.name.lexeme == "init";
             let function =
                 LoxFunction::new(method.clone(), self.environment.clone(), is_initializer);
             methods.insert(method.name.lexeme.clone(), function);

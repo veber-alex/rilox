@@ -39,7 +39,7 @@ pub fn install_builtins(interpreter: &mut Interpreter, resolver: &mut Resolver) 
 
     let builtins = [clock];
     for obj in array::IntoIter::new(builtins) {
-        resolver.scopes[0].insert(obj.name().to_string(), true);
+        resolver.scopes[0].insert(obj.name().into(), true);
         interpreter.environment.define(obj.into());
     }
 }

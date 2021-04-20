@@ -8,9 +8,9 @@ use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct LoxClassInner {
-    pub name: Box<str>,
+    pub name: Rc<str>,
     pub superclass: Option<LoxClass>,
-    pub methods: HashMap<String, LoxFunction>,
+    pub methods: HashMap<Rc<str>, LoxFunction>,
 }
 
 #[derive(Debug, Clone)]
@@ -18,12 +18,12 @@ pub struct LoxClass(pub Rc<LoxClassInner>);
 
 impl LoxClass {
     pub fn new(
-        name: String,
+        name: Rc<str>,
         superclass: Option<Self>,
-        methods: HashMap<String, LoxFunction>,
+        methods: HashMap<Rc<str>, LoxFunction>,
     ) -> Self {
         let inner = LoxClassInner {
-            name: name.into(),
+            name,
             superclass,
             methods,
         };

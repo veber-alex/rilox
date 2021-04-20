@@ -45,4 +45,5 @@ call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 arguments      → expression ( "," expression )* ;
 primary        → "true" | "false" | "nil" | "this"
                | NUMBER | STRING | IDENTIFIER | "(" expression ")"
-               | "super" "." IDENTIFIER ;
+               | "super" "." IDENTIFIER
+               | "f"" ( TEXT | "{" expression "}" )* """ ;

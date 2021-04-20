@@ -11,6 +11,7 @@ use crate::token::Token;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FunctionKind {
@@ -65,12 +66,12 @@ impl Resolvable for [Stmt] {
 
 #[derive(Debug, Default)]
 pub struct Scope {
-    map: HashMap<String, (bool, usize)>,
+    map: HashMap<Rc<str>, (bool, usize)>,
     var_cnt: usize,
 }
 
 impl Scope {
-    pub fn insert(&mut self, key: String, value: bool) {
+    pub fn insert(&mut self, key: Rc<str>, value: bool) {
         let current_var_cnt = self.var_cnt;
         self.map.insert(key, (value, current_var_cnt));
         self.var_cnt += 1;
@@ -117,7 +118,7 @@ impl Resolver {
 
     fn declare(&mut self, name: &Token) {
         if let Some(scope) = self.scopes.last_mut() {
-            if scope.map.contains_key(&name.lexeme) {
+            if scope.map.contains_key(&*name.lexeme) {
                 self.error(
                     name.line,
                     "Already a variable with this name in this scope.".into(),
@@ -347,7 +348,7 @@ impl StmtVisitor for Resolver {
         self.begin_scope().insert("this".into(), true);
 
         for method in &stmt.methods {
-            let declaration = if method.name.lexeme == "init" {
+            let declaration = if &*method.name.lexeme == "init" {
                 FunctionKind::Initializer
             } else {
                 FunctionKind::Method

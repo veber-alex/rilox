@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::rc::Rc;
 
 #[rustfmt::skip]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -29,12 +30,16 @@ pub enum TokenKind {
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub lexeme: String,
+    pub lexeme: Rc<str>,
     pub line: usize,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: String, line: usize) -> Self {
-        Self { kind, lexeme, line }
+    pub fn new(kind: TokenKind, lexeme: &str, line: usize) -> Self {
+        Self {
+            kind,
+            lexeme: Rc::from(lexeme),
+            line,
+        }
     }
 }

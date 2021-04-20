@@ -3,13 +3,6 @@ use crate::token::Token;
 use std::cell::Cell;
 use std::fmt::Debug;
 
-fn uid() -> usize {
-    thread_local! {
-        static VARID: Cell<usize> = Cell::new(0);
-    }
-    VARID.with(|v| v.replace(v.get() + 1))
-}
-
 pub trait ExprVisitor {
     type Output;
 
@@ -79,7 +72,6 @@ pub struct UnaryExpr {
 #[derive(Debug)]
 pub struct VariableExpr {
     pub name: Token,
-    pub id: usize,
     location: Cell<Option<Location>>,
 }
 
@@ -87,7 +79,6 @@ impl VariableExpr {
     pub fn new(name: Token) -> Self {
         Self {
             name,
-            id: uid(),
             location: Default::default(),
         }
     }
@@ -103,7 +94,6 @@ impl ExprHasLocation for VariableExpr {
 pub struct AssignExpr {
     pub name: Token,
     pub value: Expr,
-    pub id: usize,
     location: Cell<Option<Location>>,
 }
 
@@ -143,7 +133,6 @@ pub struct SetExpr {
 #[derive(Debug)]
 pub struct ThisExpr {
     pub keyword: Token,
-    pub id: usize,
     location: Cell<Option<Location>>,
 }
 
@@ -157,7 +146,6 @@ impl ExprHasLocation for ThisExpr {
 pub struct SuperExpr {
     pub keyword: Token,
     pub method: Token,
-    pub id: usize,
     location: Cell<Option<Location>>,
 }
 
@@ -232,11 +220,10 @@ impl Expr {
         Expr::Variable(VariableExpr::new(name))
     }
 
-    pub fn assign(name: Token, value: Expr, id: usize) -> Expr {
+    pub fn assign(name: Token, value: Expr) -> Expr {
         Expr::Assign(Box::new(AssignExpr {
             name,
             value,
-            id,
             location: Default::default(),
         }))
     }
@@ -272,7 +259,6 @@ impl Expr {
     pub fn this(keyword: Token) -> Expr {
         Expr::This(ThisExpr {
             keyword,
-            id: uid(),
             location: Default::default(),
         })
     }
@@ -281,7 +267,6 @@ impl Expr {
         Expr::Super(SuperExpr {
             keyword,
             method,
-            id: uid(),
             location: Default::default(),
         })
     }
