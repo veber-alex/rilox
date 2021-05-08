@@ -19,6 +19,7 @@ use std::mem;
 #[derive(Debug, Default)]
 pub struct Interpreter {
     pub environment: Enviroment,
+    pub arguments_buffer: Vec<LoxObject>,
 }
 
 impl Interpreter {
@@ -172,17 +173,16 @@ impl ExprVisitor for Interpreter {
 
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Output {
         let callee = self.evaluate(&expr.callee)?;
-        let arguments = expr
-            .arguments
-            .iter()
-            .map(|arg| self.evaluate(arg))
-            .collect::<Result<Vec<_>, _>>()?;
+        for expr in &expr.arguments {
+            let arg = self.evaluate(expr)?;
+            self.arguments_buffer.push(arg)
+        }
 
         if let LoxObject::Callable(callable) = callee {
-            let args_len = arguments.len();
+            let args_len = self.arguments_buffer.len();
             let arity = callable.arity();
             if args_len == arity {
-                callable.call(self, arguments)
+                callable.call(self)
             } else {
                 Err(ControlFlow::abort(
                     expr.paren.line,
