@@ -187,7 +187,7 @@ impl<'a> Scanner<'a> {
                 self.line += 1;
             }
 
-            self.advance_while(|c| c != '{');
+            self.advance_while(|c| c != '{' && c != '"');
             if self.current > self.start {
                 self.add_token(TokenKind::Str);
                 self.start = self.current;
