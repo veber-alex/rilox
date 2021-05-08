@@ -166,6 +166,12 @@ impl Resolver {
     }
 }
 
+impl Default for Resolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExprVisitor for Resolver {
     type Output = ();
 

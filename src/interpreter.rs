@@ -59,14 +59,11 @@ impl Interpreter {
     where
         EXPR: ExprHasLocation,
     {
-        if let Some(loc) = expr.get_location() {
-            Ok(self.environment.get_at(loc))
-        } else {
-            Err(ControlFlow::abort(
-                name.line,
-                format!("Undefined variable '{}'.", name.lexeme),
-            ))
-        }
+        expr.get_location()
+            .ok_or_else(|| {
+                ControlFlow::abort(name.line, format!("Undefined variable '{}'.", name.lexeme))
+            })
+            .map(|loc| self.environment.get_at(loc))
     }
 }
 
