@@ -24,9 +24,7 @@ impl LoxFunction {
 
     pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
         let env = Enviroment::with_enclosing(self.closure.clone());
-        for value in interpreter.arguments_buffer.drain(..) {
-            env.define(value);
-        }
+        env.define_many(interpreter.arguments_buffer.drain(..));
 
         match interpreter.execute_block(&self.declaration.body, env) {
             // init() always returns 'this'
@@ -34,8 +32,7 @@ impl LoxFunction {
                 Ok(self.closure.get_at(Location::new(0, 0)))
             }
             Err(ControlFlow::Return(Some(v))) => Ok(v),
-            Err(ControlFlow::Return(None)) => Ok(LoxObject::nil()),
-            Ok(_) => Ok(LoxObject::nil()),
+            Ok(_) | Err(ControlFlow::Return(None)) => Ok(LoxObject::nil()),
             Err(e) => Err(e),
         }
     }

@@ -27,6 +27,13 @@ impl Enviroment {
         values.len() - 1
     }
 
+    pub fn define_many<I>(&self, iter: I)
+    where
+        I: Iterator<Item = LoxObject>,
+    {
+        self.0.values.borrow_mut().extend(iter);
+    }
+
     fn ancestor(&self, distance: usize) -> &Enviroment {
         let mut enviroment = Some(self);
         for _ in 0..distance {
