@@ -23,6 +23,7 @@ pub struct Scanner<'a> {
     current: usize,
     line: usize,
     had_error: bool,
+    in_fstring_expr: bool,
 }
 
 impl<'a> Scanner<'a> {
@@ -35,12 +36,12 @@ impl<'a> Scanner<'a> {
             current: 0,
             line: 1,
             had_error: false,
+            in_fstring_expr: false,
         }
     }
 
     pub fn scan_tokens(mut self) -> (Vec<Token>, bool) {
         while self.source_iter.peek().is_some() {
-            self.start = self.current;
             self.scan_token()
         }
         self.tokens.push(Token::new(TokenKind::Eof, "", self.line));
@@ -50,12 +51,16 @@ impl<'a> Scanner<'a> {
 
     fn scan_token(&mut self) {
         use TokenKind::*;
+        self.start = self.current;
         if let Some(c) = self.advance() {
             match c {
                 '(' => self.add_token(LeftParen),
                 ')' => self.add_token(RightParen),
                 '{' => self.add_token(LeftBrace),
-                '}' => self.add_token(RightBrace),
+                '}' => {
+                    self.add_token(RightBrace);
+                    self.in_fstring_expr = false
+                }
                 ',' => self.add_token(Comma),
                 '.' => self.add_token(Dot),
                 '-' => self.add_token(Minus),
@@ -101,7 +106,14 @@ impl<'a> Scanner<'a> {
                         self.add_token(Slash)
                     }
                 }
-                '"' => self.string(),
+                '"' => {
+                    if self.in_fstring_expr {
+                        self.error(self.line, "Fstring expected '}'");
+                        self.in_fstring_expr = false;
+                    } else {
+                        self.string()
+                    }
+                }
                 'f' if self.advance_if_eq('"') => self.fstring(),
                 number!() => self.number(),
                 alpha!() => self.identifier(),
@@ -194,14 +206,14 @@ impl<'a> Scanner<'a> {
             }
 
             if self.peek() == Some('{') {
-                self.advance_while(|c| c != '}');
-                self.advance();
-                // FIXME: make recursive + error handling + escaping
-                let scanner = Scanner::new(&self.source[self.start..self.current]);
-                let (mut tokens, _) = scanner.scan_tokens();
-                // Remove Eof
-                tokens.pop();
-                self.tokens.extend(tokens);
+                // FIXME: better error handling + escaping
+                self.in_fstring_expr = true;
+                while self.in_fstring_expr {
+                    self.scan_token();
+                }
+                if self.had_error {
+                    return;
+                }
                 self.start = self.current;
             }
         }
