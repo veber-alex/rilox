@@ -51,7 +51,6 @@ impl<'a> Scanner<'a> {
 
     fn scan_token(&mut self) {
         use TokenKind::*;
-        self.start = self.current;
         if let Some(c) = self.advance() {
             match c {
                 '(' => self.add_token(LeftParen),
@@ -117,8 +116,11 @@ impl<'a> Scanner<'a> {
                 'f' if self.advance_if_eq('"') => self.fstring(),
                 number!() => self.number(),
                 alpha!() => self.identifier(),
-                ' ' | '\r' | '\t' => (),
-                '\n' => self.line += 1,
+                ' ' | '\r' | '\t' => self.skip(),
+                '\n' => {
+                    self.line += 1;
+                    self.skip()
+                }
                 _ => self.error(self.line, "Unexpected character."),
             }
         }
@@ -192,7 +194,6 @@ impl<'a> Scanner<'a> {
 
     fn fstring(&mut self) {
         self.add_token(TokenKind::FstringStart);
-        self.start = self.current;
 
         while matches!(self.peek(), Some(c) if c != '"') {
             if self.peek() == Some('\n') {
@@ -202,7 +203,6 @@ impl<'a> Scanner<'a> {
             self.advance_while(|c| c != '{' && c != '"');
             if self.current > self.start {
                 self.add_token(TokenKind::Str);
-                self.start = self.current;
             }
 
             if self.peek() == Some('{') {
@@ -214,7 +214,6 @@ impl<'a> Scanner<'a> {
                 if self.had_error {
                     return;
                 }
-                self.start = self.current;
             }
         }
 
@@ -227,6 +226,8 @@ impl<'a> Scanner<'a> {
         self.advance();
 
         self.add_token(TokenKind::FstringEnd);
+
+        dbg!(&self.tokens);
     }
 
     fn number(&mut self) {
@@ -280,7 +281,12 @@ impl<'a> Scanner<'a> {
 
     fn add_token(&mut self, ttype: TokenKind) {
         let text = &self.source[self.start..self.current];
-        self.tokens.push(Token::new(ttype, text, self.line))
+        self.tokens.push(Token::new(ttype, text, self.line));
+        self.start = self.current;
+    }
+
+    fn skip(&mut self) {
+        self.start = self.current;
     }
 
     fn error(&mut self, line: usize, message: &str) {
