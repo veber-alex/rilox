@@ -1,10 +1,9 @@
 [package]
 name = "rilox"
 version = "0.1.0"
-authors = ["Alex Veber <alexve@nvidia.com>"]
+authors = ["Alex Veber <alexveber@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 
@@ -12,4 +11,4 @@ edition = "2018"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-debug = true
+# debug = true
