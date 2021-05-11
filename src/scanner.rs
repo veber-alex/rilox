@@ -3,18 +3,6 @@ use crate::report_error;
 use crate::token::{Token, TokenKind};
 use std::str::CharIndices;
 
-macro_rules! number {
-    () => {
-        '0'..='9'
-    };
-}
-
-macro_rules! alpha {
-    () => {
-        'a'..='z' | 'A'..='Z' | '_'
-    };
-}
-
 pub struct Scanner<'a> {
     source: &'a str,
     source_iter: Peekable2<CharIndices<'a>>,
@@ -114,8 +102,8 @@ impl<'a> Scanner<'a> {
                     }
                 }
                 'f' if self.advance_if_eq('"') => self.fstring(),
-                number!() => self.number(),
-                alpha!() => self.identifier(),
+                '0'..='9' => self.number(),
+                'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
                 ' ' | '\r' | '\t' => self.skip(),
                 '\n' => {
                     self.line += 1;
@@ -231,7 +219,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn number(&mut self) {
-        let is_digit = |c| matches!(c, number!());
+        let is_digit = |c| matches!(c, '0'..='9');
 
         self.advance_while(is_digit);
 
@@ -272,7 +260,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn identifier(&mut self) {
-        self.advance_while(|c| matches!(c, number!() | alpha!()));
+        self.advance_while(|c| matches!(c, '0'..='9' | 'a'..='z' | 'A'..='Z' | '_'));
 
         let text = &self.source[self.start..self.current];
         let tt = self.keywords(text);
