@@ -24,7 +24,7 @@ impl LoxFunction {
 
     pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
         let env = Enviroment::with_enclosing(self.closure.clone());
-        env.define_many(interpreter.arguments_buffer.drain(..));
+        env.define_append(&mut interpreter.arguments_buffer);
 
         match interpreter.execute_block(&self.declaration.body, env) {
             // init() always returns 'this'

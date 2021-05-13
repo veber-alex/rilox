@@ -27,11 +27,8 @@ impl Enviroment {
         values.len() - 1
     }
 
-    pub fn define_many<I>(&self, iter: I)
-    where
-        I: Iterator<Item = LoxObject>,
-    {
-        self.0.values.borrow_mut().extend(iter);
+    pub fn define_append(&self, source: &mut Vec<LoxObject>) {
+        self.0.values.borrow_mut().append(source);
     }
 
     fn ancestor(&self, distance: usize) -> &Enviroment {
