@@ -69,7 +69,7 @@ impl Display for LoxObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoxObject::Number(v) => v.fmt(f),
-            LoxObject::Nil => f.write_str("Nil"),
+            LoxObject::Nil => f.write_str("nil"),
             LoxObject::Bool(v) => v.fmt(f),
             LoxObject::String(v) => v.fmt(f),
             LoxObject::Callable(v) => v.fmt(f),
