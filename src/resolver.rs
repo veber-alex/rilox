@@ -222,7 +222,7 @@ impl ExprVisitor for Resolver {
     }
 
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
-        if self.current_class == ClassKind::Class {
+        if matches!(self.current_class, ClassKind::Class | ClassKind::Subclass) {
             self.resolve_local(expr, &expr.keyword)
         } else {
             self.error(
