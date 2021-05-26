@@ -1,6 +1,6 @@
 use super::instance::LoxInstance;
 use super::object::LoxObject;
-use crate::enviroment::Enviroment;
+use crate::environment::Environment;
 use crate::expr::Location;
 use crate::interpreter::{ControlFlow, Interpreter};
 use crate::stmt::FunStmt;
@@ -10,11 +10,11 @@ use std::fmt::Display;
 pub struct LoxFunction {
     pub is_initializer: bool,
     pub declaration: FunStmt,
-    pub closure: Enviroment,
+    pub closure: Environment,
 }
 
 impl LoxFunction {
-    pub fn new(declaration: FunStmt, closure: Enviroment, is_initializer: bool) -> Self {
+    pub fn new(declaration: FunStmt, closure: Environment, is_initializer: bool) -> Self {
         Self {
             is_initializer,
             declaration,
@@ -23,7 +23,7 @@ impl LoxFunction {
     }
 
     pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
-        let env = Enviroment::with_enclosing(self.closure.clone());
+        let env = Environment::with_enclosing(self.closure.clone());
         env.define_append(&mut interpreter.arguments_buffer);
 
         match interpreter.execute_block(&self.declaration.body, env) {
@@ -42,9 +42,9 @@ impl LoxFunction {
     }
 
     pub fn bind(self, instance: LoxInstance) -> Self {
-        let enviroment = Enviroment::with_enclosing(self.closure);
-        enviroment.define(LoxObject::instance(instance));
-        LoxFunction::new(self.declaration, enviroment, self.is_initializer)
+        let environment = Environment::with_enclosing(self.closure);
+        environment.define(LoxObject::instance(instance));
+        LoxFunction::new(self.declaration, environment, self.is_initializer)
     }
 }
 

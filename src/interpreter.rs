@@ -1,4 +1,4 @@
-use crate::enviroment::Enviroment;
+use crate::environment::Environment;
 use crate::expr::{
     AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, FstringExpr, GetExpr,
     GroupingExpr, LiteralExpr, Location, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr,
@@ -18,7 +18,7 @@ use std::mem;
 
 #[derive(Debug, Default)]
 pub struct Interpreter {
-    pub environment: Enviroment,
+    pub environment: Environment,
     pub arguments_buffer: Vec<LoxObject>,
 }
 
@@ -42,7 +42,7 @@ impl Interpreter {
     pub fn execute_block(
         &mut self,
         statements: &[Stmt],
-        env: Enviroment,
+        env: Environment,
     ) -> Result<(), ControlFlow> {
         let previous = mem::replace(&mut self.environment, env);
         let result = statements.iter().try_for_each(|stmt| self.execute(stmt));
@@ -129,7 +129,7 @@ impl ExprVisitor for Interpreter {
                 } else {
                     Err(ControlFlow::abort(
                         expr.operator.line,
-                        "Only nunbers can be negated".to_string(),
+                        "Only numbers can be negated".to_string(),
                     ))
                 }
             }
@@ -288,7 +288,7 @@ impl StmtVisitor for Interpreter {
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Self::Output {
         self.execute_block(
             &stmt.statements,
-            Enviroment::with_enclosing(self.environment.clone()),
+            Environment::with_enclosing(self.environment.clone()),
         )
     }
 
@@ -351,7 +351,7 @@ impl StmtVisitor for Interpreter {
 
         let enclosing = if let Some(superclass) = &superclass {
             let enclosing = self.environment.clone();
-            self.environment = Enviroment::with_enclosing(enclosing.clone());
+            self.environment = Environment::with_enclosing(enclosing.clone());
             self.environment.define(superclass.clone().into());
             Some(enclosing)
         } else {

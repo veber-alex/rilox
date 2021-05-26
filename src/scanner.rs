@@ -214,8 +214,6 @@ impl<'a> Scanner<'a> {
         self.advance();
 
         self.add_token(TokenKind::FstringEnd);
-
-        dbg!(&self.tokens);
     }
 
     fn number(&mut self) {
@@ -267,9 +265,9 @@ impl<'a> Scanner<'a> {
         self.add_token(tt)
     }
 
-    fn add_token(&mut self, ttype: TokenKind) {
+    fn add_token(&mut self, kind: TokenKind) {
         let text = &self.source[self.start..self.current];
-        self.tokens.push(Token::new(ttype, text, self.line));
+        self.tokens.push(Token::new(kind, text, self.line));
         self.start = self.current;
     }
 

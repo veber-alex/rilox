@@ -2,7 +2,7 @@ use super::callable::BuiltinFn;
 use super::class::LoxClass;
 use super::function::LoxFunction;
 use super::instance::LoxInstance;
-use crate::enviroment::Enviroment;
+use crate::environment::Environment;
 use crate::model::callable::LoxCallable;
 use crate::stmt::FunStmt;
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ impl LoxObject {
         Self::Instance(instance)
     }
 
-    pub fn function(declaration: FunStmt, closure: Enviroment, is_initializer: bool) -> LoxObject {
+    pub fn function(declaration: FunStmt, closure: Environment, is_initializer: bool) -> LoxObject {
         Self::Callable(LoxCallable::Function(LoxFunction::new(
             declaration,
             closure,

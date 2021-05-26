@@ -28,8 +28,6 @@ impl Display for FunctionKind {
 #[derive(Debug)]
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>,
-    //  TODO: Add lookback of Token for better error messages
-    // lookback: Token,
 }
 
 impl Parser {
@@ -99,7 +97,7 @@ impl Parser {
             loop {
                 if params.len() >= 255 {
                     if let Some(token) = self.peek(|_| true) {
-                        // TODO: Non panicing error?
+                        // TODO: Non panicking error?
                         return Err(Self::error(token, "Can't have more than 255 parameters."));
                     }
                 }
@@ -366,7 +364,7 @@ impl Parser {
             loop {
                 if arguments.len() >= 255 {
                     if let Some(token) = self.peek(|_| true) {
-                        // FIXME: Non panicing error
+                        // FIXME: Non panicking error
                         return Err(Self::error(token, "Can't have more than 255 arguments."));
                     }
                 }
@@ -424,7 +422,7 @@ impl Parser {
                 }
                 Expr::fstring(parts)
             }
-            _ => return Err(Self::error(&token, "Syntax Error")),
+            _ => return Err(Self::error(&token, "Expect expression.")),
         };
 
         Ok(expr)

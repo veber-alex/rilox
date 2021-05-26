@@ -10,7 +10,7 @@ use std::io::BufRead;
 use std::{io, process};
 use stmt::Stmt;
 
-mod enviroment;
+mod environment;
 mod expr;
 mod interpreter;
 mod model;
