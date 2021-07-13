@@ -1,0 +1,2 @@
+// expect error: [line 2] Parse Error at 'class': Expect expression.
+while (true) class Foo {}

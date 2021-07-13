@@ -1,0 +1,1 @@
+unknown = "what"; // expect error: [line 1] Runtime Error: Undefined variable 'unknown'.

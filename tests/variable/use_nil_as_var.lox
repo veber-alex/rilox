@@ -1,0 +1,2 @@
+//expect error: [line 2] Parse Error at 'nil': Expect variable name.
+var nil = "value";

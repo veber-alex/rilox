@@ -1,0 +1,1 @@
+true + nil; // expect error: [line 1] Runtime Error: Operands must be two numbers or two strings.

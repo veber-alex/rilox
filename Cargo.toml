@@ -12,3 +12,8 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 # debug = true
+
+[[test]]
+name = "rilox"
+path = "tests/runner.rs"
+harness = false

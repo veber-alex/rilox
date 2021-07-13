@@ -1,0 +1,1 @@
+fun f() 123; // expect error: [line 1] Parse Error at '123': Expect '{' before function body.

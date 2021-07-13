@@ -1,0 +1,2 @@
+// expect error: [line 2] Parse Error at 'fun': Expect expression.
+while (true) fun foo() {}

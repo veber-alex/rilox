@@ -1,0 +1,1 @@
+this; // expect error: [line 1] Resolve Error: Can't use 'this' outside of a class.
