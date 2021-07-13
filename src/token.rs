@@ -27,6 +27,22 @@ pub enum TokenKind {
   Eof
 }
 
+#[rustfmt::skip]
+#[macro_export]
+macro_rules! T {
+    ('(') => {TokenKind::LeftParen};
+    (')') => {TokenKind::RightParen};
+    ('{') => {TokenKind::LeftBrace};
+    ('}') => {TokenKind::RightBrace};
+    (',') => {TokenKind::Comma};
+    ('.') => {TokenKind::Dot};
+    ('-') => {TokenKind::Minus};
+    ('+') => {TokenKind::Plus};
+    (';') => {TokenKind::Semicolon};
+    ('/') => {TokenKind::Slash};
+    ('*') => {TokenKind::Star};
+}
+
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
