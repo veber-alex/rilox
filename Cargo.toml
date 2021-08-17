@@ -13,7 +13,16 @@ codegen-units = 1
 panic = "abort"
 # debug = true
 
+[profile.bench]
+lto = "fat"
+codegen-units = 1
+
 [[test]]
 name = "rilox"
 path = "tests/runner.rs"
+harness = false
+
+[[bench]]
+name = "rilox"
+path = "benches/runner.rs"
 harness = false
