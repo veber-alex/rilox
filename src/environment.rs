@@ -1,34 +1,50 @@
 use crate::expr::Location;
+use crate::interpreter::{ACell, ACellOwner};
 use crate::model::object::LoxObject;
-use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Debug, Default, PartialEq)]
 pub struct EnvironmentInner {
     enclosing: Option<Environment>,
-    values: RefCell<Vec<LoxObject>>,
+    values: ACell<Vec<LoxObject>>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+impl Default for EnvironmentInner {
+    fn default() -> Self {
+        Self {
+            enclosing: Default::default(),
+            values: ACell::new(vec![]),
+        }
+    }
+}
+
+impl std::fmt::Debug for EnvironmentInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EnvironmentInner")
+            .field("enclosing", &self.enclosing)
+            .finish()
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Environment(Rc<EnvironmentInner>);
 
 impl Environment {
     pub fn with_enclosing(enclosing: Environment) -> Self {
         Self(Rc::new(EnvironmentInner {
             enclosing: Some(enclosing),
-            values: Default::default(),
+            values: ACell::new(vec![]),
         }))
     }
 
     /// Defines a new variable and returns it's index in the environment
-    pub fn define(&self, value: LoxObject) -> usize {
-        let mut values = self.0.values.borrow_mut();
+    pub fn define(&self, value: LoxObject, owner: &mut ACellOwner) -> usize {
+        let values = owner.rw(&self.0.values);
         values.push(value);
         values.len() - 1
     }
 
-    pub fn define_append(&self, source: &mut Vec<LoxObject>) {
-        self.0.values.borrow_mut().append(source);
+    pub fn define_append(&self, source: &mut Vec<LoxObject>, owner: &mut ACellOwner) {
+        owner.rw(&self.0.values).append(source);
     }
 
     fn ancestor(&self, distance: usize) -> &Environment {
@@ -40,11 +56,9 @@ impl Environment {
         environment.expect("Environment at distance not found")
     }
 
-    pub fn get_at(&self, loc: Location) -> LoxObject {
-        self.ancestor(loc.distance)
-            .0
-            .values
-            .borrow()
+    pub fn get_at(&self, loc: Location, owner: &ACellOwner) -> LoxObject {
+        owner
+            .ro(&self.ancestor(loc.distance).0.values)
             .get(loc.index)
             .unwrap_or_else(|| {
                 panic!(
@@ -55,12 +69,9 @@ impl Environment {
             .clone()
     }
 
-    pub fn assign_at(&self, loc: Location, value: LoxObject) {
-        *self
-            .ancestor(loc.distance)
-            .0
-            .values
-            .borrow_mut()
+    pub fn assign_at(&self, loc: Location, value: LoxObject, owner: &mut ACellOwner) {
+        *owner
+            .rw(&self.ancestor(loc.distance).0.values)
             .get_mut(loc.index)
             .unwrap_or_else(|| {
                 panic!(

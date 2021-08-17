@@ -2,7 +2,7 @@ use super::instance::LoxInstance;
 use super::object::LoxObject;
 use crate::environment::Environment;
 use crate::expr::Location;
-use crate::interpreter::{ControlFlow, Interpreter};
+use crate::interpreter::{ACellOwner, ControlFlow, Interpreter};
 use crate::stmt::FunStmt;
 use std::fmt::Display;
 
@@ -24,13 +24,16 @@ impl LoxFunction {
 
     pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
         let env = Environment::with_enclosing(self.closure.clone());
-        env.define_append(&mut interpreter.arguments_buffer);
+        env.define_append(
+            &mut interpreter.arguments_buffer,
+            &mut interpreter.acell_owner,
+        );
 
         match interpreter.execute_block(&self.declaration.body, env) {
             // init() always returns 'this'
-            Ok(_) | Err(ControlFlow::Return(None)) if self.is_initializer => {
-                Ok(self.closure.get_at(Location::new(0, 0)))
-            }
+            Ok(_) | Err(ControlFlow::Return(None)) if self.is_initializer => Ok(self
+                .closure
+                .get_at(Location::new(0, 0), &interpreter.acell_owner)),
             Err(ControlFlow::Return(Some(v))) => Ok(v),
             Ok(_) | Err(ControlFlow::Return(None)) => Ok(LoxObject::nil()),
             Err(e) => Err(e),
@@ -41,9 +44,9 @@ impl LoxFunction {
         self.declaration.params.len()
     }
 
-    pub fn bind(self, instance: LoxInstance) -> Self {
+    pub fn bind(self, instance: LoxInstance, owner: &mut ACellOwner) -> Self {
         let environment = Environment::with_enclosing(self.closure);
-        environment.define(LoxObject::instance(instance));
+        environment.define(LoxObject::instance(instance), owner);
         LoxFunction::new(self.declaration, environment, self.is_initializer)
     }
 }

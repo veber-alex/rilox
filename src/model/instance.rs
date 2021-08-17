@@ -1,37 +1,44 @@
 use super::callable::LoxCallable;
 use super::class::LoxClass;
 use super::object::LoxObject;
-use crate::interpreter::ControlFlow;
+use crate::interpreter::{ACell, ACellOwner, ControlFlow};
 use crate::token::Token;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LoxInstance {
     pub class: LoxClass,
     // TODO: Replace this Rc with Gc to collect cycles
-    pub fields: Rc<RefCell<HashMap<Rc<str>, LoxObject>>>,
+    pub fields: Rc<ACell<HashMap<Rc<str>, LoxObject>>>,
+}
+
+impl std::fmt::Debug for LoxInstance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoxInstance")
+            .field("class", &self.class)
+            .finish()
+    }
 }
 
 impl LoxInstance {
     pub fn new(class: LoxClass) -> Self {
         Self {
             class,
-            fields: Default::default(),
+            fields: Rc::new(ACell::new(HashMap::new())),
         }
     }
 
-    pub fn get(&self, token: &Token) -> Result<LoxObject, ControlFlow> {
+    pub fn get(&self, token: &Token, owner: &mut ACellOwner) -> Result<LoxObject, ControlFlow> {
         // property from instance
-        if let Some(obj) = self.fields.borrow().get(&*token.lexeme).cloned() {
+        if let Some(obj) = owner.ro(&self.fields).get(&*token.lexeme).cloned() {
             return Ok(obj);
         }
 
         // method from class - bind to instance
         if let Some(obj) = self.class.find_method(&token.lexeme) {
-            let function = obj.bind(self.clone());
+            let function = obj.bind(self.clone(), owner);
             return Ok(LoxObject::Callable(LoxCallable::Function(function)));
         }
 
@@ -41,8 +48,8 @@ impl LoxInstance {
         ))
     }
 
-    pub fn set(&self, token: &Token, value: LoxObject) {
-        self.fields.borrow_mut().insert(token.lexeme.clone(), value);
+    pub fn set(&self, token: &Token, value: LoxObject, owner: &mut ACellOwner) {
+        owner.rw(&self.fields).insert(token.lexeme.clone(), value);
     }
 }
 

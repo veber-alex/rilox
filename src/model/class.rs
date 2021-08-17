@@ -43,7 +43,8 @@ impl LoxClass {
         let initializer = self.find_method("init");
 
         if let Some(init) = initializer {
-            init.bind(instance.clone()).call(interpreter)?;
+            init.bind(instance.clone(), &mut interpreter.acell_owner)
+                .call(interpreter)?;
         }
 
         Ok(LoxObject::instance(instance))

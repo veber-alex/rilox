@@ -13,13 +13,20 @@ use crate::stmt::{
     StmtVisitor, VarStmt, WhileStmt,
 };
 use crate::token::{Token, TokenKind::*};
+use qcell::{TCell, TCellOwner};
 use std::collections::HashMap;
 use std::mem;
 
-#[derive(Debug, Default)]
+// QCell types
+pub struct TCellMarker;
+pub type ACell<T> = TCell<TCellMarker, T>;
+pub type ACellOwner = TCellOwner<TCellMarker>;
+
+#[derive(Default)]
 pub struct Interpreter {
     pub environment: Environment,
     pub arguments_buffer: Vec<LoxObject>,
+    pub acell_owner: ACellOwner,
 }
 
 impl Interpreter {
@@ -63,7 +70,7 @@ impl Interpreter {
             .ok_or_else(|| {
                 ControlFlow::abort(name.line, format!("Undefined variable '{}'.", name.lexeme))
             })
-            .map(|loc| self.environment.get_at(loc))
+            .map(|loc| self.environment.get_at(loc, &self.acell_owner))
     }
 }
 
@@ -145,7 +152,8 @@ impl ExprVisitor for Interpreter {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
         let value = self.evaluate(&expr.value)?;
         if let Some(loc) = expr.get_location() {
-            self.environment.assign_at(loc, value.clone());
+            self.environment
+                .assign_at(loc, value.clone(), &mut self.acell_owner);
         } else {
             return Err(ControlFlow::abort(
                 expr.name.line,
@@ -197,7 +205,7 @@ impl ExprVisitor for Interpreter {
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output {
         let object = self.evaluate(&expr.object)?;
         if let LoxObject::Instance(instance) = object {
-            instance.get(&expr.name)
+            instance.get(&expr.name, &mut self.acell_owner)
         } else {
             Err(ControlFlow::abort(
                 expr.name.line,
@@ -211,7 +219,7 @@ impl ExprVisitor for Interpreter {
 
         if let LoxObject::Instance(instance) = object {
             let value = self.evaluate(&expr.value)?;
-            instance.set(&expr.name, value.clone());
+            instance.set(&expr.name, value.clone(), &mut self.acell_owner);
             Ok(value)
         } else {
             Err(ControlFlow::abort(
@@ -228,13 +236,13 @@ impl ExprVisitor for Interpreter {
     fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output {
         let loc = expr.get_location().expect("super in class without super");
 
-        let superclass = match self.environment.get_at(loc) {
+        let superclass = match self.environment.get_at(loc, &self.acell_owner) {
             LoxObject::Callable(LoxCallable::Class(cls)) => cls,
             _ => panic!("super outside of class"),
         };
 
         let inst_loc = Location::new(loc.distance - 1, 0);
-        let instance = match self.environment.get_at(inst_loc) {
+        let instance = match self.environment.get_at(inst_loc, &self.acell_owner) {
             LoxObject::Instance(inst) => inst,
             _ => panic!("unbound method"),
         };
@@ -246,7 +254,7 @@ impl ExprVisitor for Interpreter {
             )
         })?;
 
-        Ok(method.bind(instance).into())
+        Ok(method.bind(instance, &mut self.acell_owner).into())
     }
 
     fn visit_fstring_expr(&mut self, expr: &FstringExpr) -> Self::Output {
@@ -281,7 +289,7 @@ impl StmtVisitor for Interpreter {
             .as_ref()
             .map_or_else(|| Ok(LoxObject::nil()), |expr| self.evaluate(expr))?;
 
-        self.environment.define(initializer);
+        self.environment.define(initializer, &mut self.acell_owner);
         Ok(())
     }
 
@@ -321,7 +329,7 @@ impl StmtVisitor for Interpreter {
 
     fn visit_function_stmt(&mut self, stmt: &FunStmt) -> Self::Output {
         let function = LoxObject::function(stmt.clone(), self.environment.clone(), false);
-        self.environment.define(function);
+        self.environment.define(function, &mut self.acell_owner);
 
         Ok(())
     }
@@ -347,12 +355,15 @@ impl StmtVisitor for Interpreter {
             None
         };
 
-        let index = self.environment.define(LoxObject::nil());
+        let index = self
+            .environment
+            .define(LoxObject::nil(), &mut self.acell_owner);
 
         let enclosing = if let Some(superclass) = &superclass {
             let enclosing = self.environment.clone();
             self.environment = Environment::with_enclosing(enclosing.clone());
-            self.environment.define(superclass.clone().into());
+            self.environment
+                .define(superclass.clone().into(), &mut self.acell_owner);
             Some(enclosing)
         } else {
             None
@@ -373,7 +384,8 @@ impl StmtVisitor for Interpreter {
         }
 
         let loc = Location::new(0, index);
-        self.environment.assign_at(loc, class);
+        self.environment
+            .assign_at(loc, class, &mut self.acell_owner);
 
         Ok(())
     }

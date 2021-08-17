@@ -40,6 +40,8 @@ pub fn install_builtins(interpreter: &mut Interpreter, resolver: &mut Resolver) 
     let builtins = [clock];
     for obj in array::IntoIter::new(builtins) {
         resolver.scopes[0].insert(obj.name().into(), true);
-        interpreter.environment.define(obj.into());
+        interpreter
+            .environment
+            .define(obj.into(), &mut interpreter.acell_owner);
     }
 }
