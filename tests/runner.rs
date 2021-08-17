@@ -1,6 +1,5 @@
-use std::ffi::OsStr;
 use std::path::Path;
-use std::process::{self, Command, ExitStatus, Stdio};
+use std::process::{self, Command, Stdio};
 use std::{env, fs, io};
 
 macro_rules! red {
@@ -53,28 +52,21 @@ impl TestsResult {
 type Result<T, E = TestError> = std::result::Result<T, E>;
 
 const ROOT: &str = "tests/";
-const BINARY: &str = "target/debug/rilox";
 
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     if args.len() > 1 {
-        eprintln!("Usage: cargo test --test rilox [-- {{test_dir/test_name}}] [--run]");
+        eprintln!("Usage: cargo test --test rilox [-- {{path_to_test/test_name.rilox}}]");
         process::exit(1)
     }
 
     let path;
     let tests_path = if let Some(p) = args.next() {
-        path = if p.ends_with('/') {
-            format!("{}{}", ROOT, p)
-        } else {
-            format!("{}{}.lox", ROOT, p)
-        };
+        path = p;
         Path::new(&path)
     } else {
         Path::new(ROOT)
     };
-
-    compile_rilox_release()?;
 
     let mut result = TestsResult::new(0, 0, 0);
     if tests_path.is_dir() {
@@ -102,52 +94,37 @@ fn main() -> Result<()> {
     process::exit(exit_code);
 }
 
-fn compile_rilox_release() -> Result<ExitStatus> {
-    print!("compiling rilox...");
-    let result = Ok(Command::new("cargo")
-        .arg("build")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .status()?);
-    println!("done!\n");
-    result
-}
-
 fn visit_dirs(dir: &Path, result: &mut TestsResult) -> Result<()> {
-    if dir.is_dir() {
-        let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
-        entries.sort_unstable_by_key(|e| e.path());
-        for entry in entries {
-            let path = entry.path();
-            if path.is_dir() {
-                visit_dirs(&path, result)?;
-            } else {
-                visit_file(&path, result)?;
-            };
-        }
+    let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_unstable_by_key(|e| e.path());
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            visit_dirs(&path, result)?;
+        } else {
+            visit_file(&path, result)?;
+        };
     }
 
     Ok(())
 }
 
 fn visit_file(file: &Path, result: &mut TestsResult) -> Result<()> {
-    if file.extension() == Some(OsStr::new("lox")) {
-        let to_skip = file.file_stem().unwrap().to_string_lossy().starts_with('_');
-        match run_test(&file) {
-            Err(TestError::Fail) => result.failed += 1,
-            Err(TestError::Skip) if to_skip => {
-                result.passed += 1;
-                println!("test {} ... {}", file.display(), green!("ok(skipped)"));
-            }
-            Err(TestError::Skip) => {
-                result.skipped += 1;
-                println!("test {} ... {}", file.display(), yellow!("skipped"));
-            }
-            Err(err @ TestError::IoError(_)) => return Err(err),
-            Ok(_) => {
-                result.passed += 1;
-                println!("test {} ... {}", file.display(), green!("ok"));
-            }
+    let to_skip = file.file_stem().unwrap().to_string_lossy().starts_with('_');
+    match run_test(file) {
+        Err(TestError::Fail) => result.failed += 1,
+        Err(TestError::Skip) if to_skip => {
+            result.passed += 1;
+            println!("test {} ... {}", file.display(), green!("ok(skipped)"));
+        }
+        Err(TestError::Skip) => {
+            result.skipped += 1;
+            println!("test {} ... {}", file.display(), yellow!("skipped"));
+        }
+        Err(err @ TestError::IoError(_)) => return Err(err),
+        Ok(_) => {
+            result.passed += 1;
+            println!("test {} ... {}", file.display(), green!("ok"));
         }
     }
 
@@ -155,7 +132,7 @@ fn visit_file(file: &Path, result: &mut TestsResult) -> Result<()> {
 }
 
 fn run_test(file: &Path) -> Result<()> {
-    let output = Command::new(BINARY)
+    let output = Command::new(env!("CARGO_BIN_EXE_rilox"))
         .arg(&file)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -173,13 +150,13 @@ fn run_test(file: &Path) -> Result<()> {
         // expect
         if let Some((_, expected)) = line.split_once("// expect: ") {
             test_ran = true;
-            handle_expect_case(&file, n, expected, stdout_iter.next())?;
+            handle_expect_case(file, n, expected, stdout_iter.next())?;
         }
 
         // expect error
         if let Some((_, expected)) = line.split_once("// expect error: ") {
             test_ran = true;
-            handle_expect_case(&file, n, expected, stderr_iter.next())?;
+            handle_expect_case(file, n, expected, stderr_iter.next())?;
         }
     }
 
