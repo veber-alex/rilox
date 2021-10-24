@@ -5,7 +5,9 @@ use super::instance::LoxInstance;
 use crate::environment::Environment;
 use crate::model::callable::LoxCallable;
 use crate::stmt::FunStmt;
-use std::collections::HashMap;
+
+use rustc_hash::FxHashMap;
+
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -51,7 +53,7 @@ impl LoxObject {
     pub fn class(
         name: Rc<str>,
         superclass: Option<LoxClass>,
-        methods: HashMap<Rc<str>, LoxFunction>,
+        methods: FxHashMap<Rc<str>, LoxFunction>,
     ) -> LoxObject {
         LoxObject::Callable(LoxCallable::Class(LoxClass::new(name, superclass, methods)))
     }

@@ -3,7 +3,9 @@ use super::class::LoxClass;
 use super::object::LoxObject;
 use crate::interpreter::{ACell, ACellOwner, ControlFlow};
 use crate::token::Token;
-use std::collections::HashMap;
+
+use rustc_hash::FxHashMap;
+
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -11,7 +13,7 @@ use std::rc::Rc;
 pub struct LoxInstance {
     pub class: LoxClass,
     // TODO: Replace this Rc with Gc to collect cycles
-    pub fields: Rc<ACell<HashMap<Rc<str>, LoxObject>>>,
+    pub fields: Rc<ACell<FxHashMap<Rc<str>, LoxObject>>>,
 }
 
 impl std::fmt::Debug for LoxInstance {
@@ -26,7 +28,7 @@ impl LoxInstance {
     pub fn new(class: LoxClass) -> Self {
         Self {
             class,
-            fields: Rc::new(ACell::new(HashMap::new())),
+            fields: Rc::new(ACell::new(FxHashMap::default())),
         }
     }
 

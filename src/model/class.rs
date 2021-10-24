@@ -1,8 +1,10 @@
+use rustc_hash::FxHashMap;
+
 use super::function::LoxFunction;
 use super::instance::LoxInstance;
 use super::object::LoxObject;
 use crate::interpreter::{ControlFlow, Interpreter};
-use std::collections::HashMap;
+
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -10,7 +12,7 @@ use std::rc::Rc;
 pub struct LoxClassInner {
     pub name: Rc<str>,
     pub superclass: Option<LoxClass>,
-    pub methods: HashMap<Rc<str>, LoxFunction>,
+    pub methods: FxHashMap<Rc<str>, LoxFunction>,
 }
 
 #[derive(Debug, Clone)]
@@ -20,7 +22,7 @@ impl LoxClass {
     pub fn new(
         name: Rc<str>,
         superclass: Option<Self>,
-        methods: HashMap<Rc<str>, LoxFunction>,
+        methods: FxHashMap<Rc<str>, LoxFunction>,
     ) -> Self {
         let inner = LoxClassInner {
             name,

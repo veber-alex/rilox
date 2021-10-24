@@ -62,7 +62,7 @@ fn visit_file(file: &Path, sum: &mut u32) -> Result<()> {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
-        for error in stderr.trim().lines() {
+        if let Some(error) = stderr.trim().lines().next() {
             return Err(io::Error::new(io::ErrorKind::Other, error));
         }
 

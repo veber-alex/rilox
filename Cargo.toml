@@ -6,7 +6,8 @@ edition = "2018"
 
 
 [dependencies]
-qcell = "0.4.1"
+qcell = "0.4.3"
+rustc-hash = "1.1.0"
 
 [profile.release]
 lto = "fat"

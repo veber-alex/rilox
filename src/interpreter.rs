@@ -13,8 +13,10 @@ use crate::stmt::{
     StmtVisitor, VarStmt, WhileStmt,
 };
 use crate::token::{Token, TokenKind::*};
+
 use qcell::{TCell, TCellOwner};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
+
 use std::mem;
 
 // QCell types
@@ -369,7 +371,7 @@ impl StmtVisitor for Interpreter {
             None
         };
 
-        let mut methods = HashMap::new();
+        let mut methods = FxHashMap::default();
         for method in &stmt.methods {
             let is_initializer = &*method.name.lexeme == "init";
             let function =

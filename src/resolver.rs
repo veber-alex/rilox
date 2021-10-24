@@ -8,8 +8,10 @@ use crate::stmt::{
     StmtVisitor, VarStmt, WhileStmt,
 };
 use crate::token::Token;
+
+use rustc_hash::FxHashMap;
+
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 
@@ -66,7 +68,7 @@ impl Resolvable for [Stmt] {
 
 #[derive(Debug, Default)]
 pub struct Scope {
-    map: HashMap<Rc<str>, (bool, usize)>,
+    map: FxHashMap<Rc<str>, (bool, usize)>,
     var_cnt: usize,
 }
 
