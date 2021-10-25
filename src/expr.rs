@@ -1,3 +1,4 @@
+use crate::arena::Id;
 use crate::model::object::LoxObject;
 use crate::token::Token;
 use std::cell::Cell;
@@ -48,14 +49,14 @@ impl Location {
 
 #[derive(Debug)]
 pub struct BinaryExpr {
-    pub left: Expr,
+    pub left: Id<Expr>,
     pub operator: Token,
-    pub right: Expr,
+    pub right: Id<Expr>,
 }
 
 #[derive(Debug)]
 pub struct GroupingExpr {
-    pub expression: Expr,
+    pub expression: Id<Expr>,
 }
 
 #[derive(Debug)]
@@ -66,7 +67,7 @@ pub struct LiteralExpr {
 #[derive(Debug)]
 pub struct UnaryExpr {
     pub operator: Token,
-    pub right: Expr,
+    pub right: Id<Expr>,
 }
 
 #[derive(Debug)]
@@ -93,7 +94,7 @@ impl ExprHasLocation for VariableExpr {
 #[derive(Debug)]
 pub struct AssignExpr {
     pub name: Token,
-    pub value: Expr,
+    pub value: Id<Expr>,
     location: Cell<Option<Location>>,
 }
 
@@ -105,29 +106,29 @@ impl ExprHasLocation for AssignExpr {
 
 #[derive(Debug)]
 pub struct CallExpr {
-    pub callee: Expr,
+    pub callee: Id<Expr>,
     pub paren: Token,
-    pub arguments: Vec<Expr>,
+    pub arguments: Vec<Id<Expr>>,
 }
 
 #[derive(Debug)]
 pub struct LogicalExpr {
-    pub left: Expr,
+    pub left: Id<Expr>,
     pub operator: Token,
-    pub right: Expr,
+    pub right: Id<Expr>,
 }
 
 #[derive(Debug)]
 pub struct GetExpr {
     pub name: Token,
-    pub object: Expr,
+    pub object: Id<Expr>,
 }
 
 #[derive(Debug)]
 pub struct SetExpr {
-    pub object: Expr,
+    pub object: Id<Expr>,
     pub name: Token,
-    pub value: Expr,
+    pub value: Id<Expr>,
 }
 
 #[derive(Debug)]
@@ -157,21 +158,21 @@ impl ExprHasLocation for SuperExpr {
 
 #[derive(Debug)]
 pub struct FstringExpr {
-    pub string: Vec<Expr>,
+    pub string: Vec<Id<Expr>>,
 }
 
 #[derive(Debug)]
 pub enum Expr {
-    Binary(Box<BinaryExpr>),
-    Grouping(Box<GroupingExpr>),
+    Binary(BinaryExpr),
+    Grouping(GroupingExpr),
     Literal(LiteralExpr),
-    Unary(Box<UnaryExpr>),
+    Unary(UnaryExpr),
     Variable(VariableExpr),
-    Assign(Box<AssignExpr>),
-    Logical(Box<LogicalExpr>),
-    Call(Box<CallExpr>),
-    Get(Box<GetExpr>),
-    Set(Box<SetExpr>),
+    Assign(AssignExpr),
+    Logical(LogicalExpr),
+    Call(CallExpr),
+    Get(GetExpr),
+    Set(SetExpr),
     This(ThisExpr),
     Super(SuperExpr),
     Fstring(FstringExpr),
@@ -196,67 +197,67 @@ impl Expr {
         }
     }
 
-    pub fn binary(left: Expr, operator: Token, right: Expr) -> Expr {
-        Expr::Binary(Box::new(BinaryExpr {
+    pub fn binary(left: Id<Expr>, operator: Token, right: Id<Expr>) -> Self {
+        Expr::Binary(BinaryExpr {
             left,
             operator,
             right,
-        }))
+        })
     }
 
-    pub fn grouping(expression: Expr) -> Expr {
-        Expr::Grouping(Box::new(GroupingExpr { expression }))
+    pub fn grouping(expression: Id<Expr>) -> Self {
+        Expr::Grouping(GroupingExpr { expression })
     }
 
-    pub fn literal(value: LoxObject) -> Expr {
+    pub fn literal(value: LoxObject) -> Self {
         Expr::Literal(LiteralExpr { value })
     }
 
-    pub fn unary(operator: Token, right: Expr) -> Expr {
-        Expr::Unary(Box::new(UnaryExpr { operator, right }))
+    pub fn unary(operator: Token, right: Id<Expr>) -> Self {
+        Expr::Unary(UnaryExpr { operator, right })
     }
 
-    pub fn variable(name: Token) -> Expr {
+    pub fn variable(name: Token) -> Self {
         Expr::Variable(VariableExpr::new(name))
     }
 
-    pub fn assign(name: Token, value: Expr) -> Expr {
-        Expr::Assign(Box::new(AssignExpr {
+    pub fn assign(name: Token, value: Id<Expr>) -> Self {
+        Expr::Assign(AssignExpr {
             name,
             value,
             location: Default::default(),
-        }))
+        })
     }
 
-    pub fn logical(left: Expr, operator: Token, right: Expr) -> Expr {
-        Expr::Logical(Box::new(LogicalExpr {
+    pub fn logical(left: Id<Expr>, operator: Token, right: Id<Expr>) -> Self {
+        Expr::Logical(LogicalExpr {
             left,
             operator,
             right,
-        }))
+        })
     }
 
-    pub fn call(callee: Expr, paren: Token, arguments: Vec<Expr>) -> Expr {
-        Expr::Call(Box::new(CallExpr {
+    pub fn call(callee: Id<Expr>, paren: Token, arguments: Vec<Id<Expr>>) -> Self {
+        Expr::Call(CallExpr {
             callee,
             paren,
             arguments,
-        }))
+        })
     }
 
-    pub fn get(name: Token, object: Expr) -> Expr {
-        Expr::Get(Box::new(GetExpr { name, object }))
+    pub fn get(name: Token, object: Id<Expr>) -> Self {
+        Expr::Get(GetExpr { name, object })
     }
 
-    pub fn set(object: Expr, name: Token, value: Expr) -> Expr {
-        Expr::Set(Box::new(SetExpr {
+    pub fn set(object: Id<Expr>, name: Token, value: Id<Expr>) -> Self {
+        Expr::Set(SetExpr {
             object,
             name,
             value,
-        }))
+        })
     }
 
-    pub fn this(keyword: Token) -> Expr {
+    pub fn this(keyword: Token) -> Self {
         Expr::This(ThisExpr {
             keyword,
             location: Default::default(),
@@ -271,7 +272,7 @@ impl Expr {
         })
     }
 
-    pub fn fstring(string: Vec<Expr>) -> Self {
+    pub fn fstring(string: Vec<Id<Expr>>) -> Self {
         Expr::Fstring(FstringExpr { string })
     }
 }

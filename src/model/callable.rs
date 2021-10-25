@@ -5,7 +5,7 @@ use crate::interpreter::{ControlFlow, Interpreter};
 use std::fmt::Display;
 
 pub trait BuiltinFn: Display + std::fmt::Debug {
-    fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow>;
+    fn call(&self, interpreter: &mut Interpreter<'_>) -> Result<LoxObject, ControlFlow>;
 
     fn arity(&self) -> usize;
 
@@ -20,7 +20,7 @@ pub enum LoxCallable {
 }
 
 impl LoxCallable {
-    pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
+    pub fn call(&self, interpreter: &mut Interpreter<'_>) -> Result<LoxObject, ControlFlow> {
         match self {
             LoxCallable::Builtin(v) => v.call(interpreter),
             LoxCallable::Function(v) => v.call(interpreter),

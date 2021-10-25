@@ -22,7 +22,7 @@ impl LoxFunction {
         }
     }
 
-    pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
+    pub fn call(&self, interpreter: &mut Interpreter<'_>) -> Result<LoxObject, ControlFlow> {
         let env = Environment::with_enclosing(self.closure.clone());
         env.define_append(
             &mut interpreter.arguments_buffer,

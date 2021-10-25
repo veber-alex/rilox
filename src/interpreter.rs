@@ -1,3 +1,4 @@
+use crate::context::Context;
 use crate::environment::Environment;
 use crate::expr::{
     AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, FstringExpr, GetExpr,
@@ -24,16 +25,21 @@ pub struct TCellMarker;
 pub type ACell<T> = TCell<TCellMarker, T>;
 pub type ACellOwner = TCellOwner<TCellMarker>;
 
-#[derive(Default)]
-pub struct Interpreter {
+pub struct Interpreter<'a> {
     pub environment: Environment,
     pub arguments_buffer: Vec<LoxObject>,
     pub acell_owner: ACellOwner,
+    ctx: &'a Context,
 }
 
-impl Interpreter {
-    pub fn new() -> Self {
-        Default::default()
+impl<'a> Interpreter<'a> {
+    pub fn new(ctx: &'a Context) -> Self {
+        Self {
+            environment: Default::default(),
+            arguments_buffer: Default::default(),
+            acell_owner: Default::default(),
+            ctx,
+        }
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Option<()> {
@@ -76,12 +82,12 @@ impl Interpreter {
     }
 }
 
-impl ExprVisitor for Interpreter {
+impl ExprVisitor for Interpreter<'_> {
     type Output = Result<LoxObject, ControlFlow>;
 
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
-        let left = self.evaluate(&expr.left)?;
-        let right = self.evaluate(&expr.right)?;
+        let left = self.evaluate(self.ctx.expr.get(expr.left))?;
+        let right = self.evaluate(self.ctx.expr.get(expr.right))?;
 
         match expr.operator.kind {
             BangEqual => Ok(LoxObject::bool(left != right)),
@@ -122,7 +128,7 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Self::Output {
-        self.evaluate(&expr.expression)
+        self.evaluate(self.ctx.expr.get(expr.expression))
     }
 
     fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> Self::Output {
@@ -130,7 +136,7 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
-        let right = self.evaluate(&expr.right)?;
+        let right = self.evaluate(self.ctx.expr.get(expr.right))?;
         match expr.operator.kind {
             Minus => {
                 if let LoxObject::Number(value) = right {
@@ -152,7 +158,7 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
-        let value = self.evaluate(&expr.value)?;
+        let value = self.evaluate(self.ctx.expr.get(expr.value))?;
         if let Some(loc) = expr.get_location() {
             self.environment
                 .assign_at(loc, value.clone(), &mut self.acell_owner);
@@ -167,21 +173,21 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output {
-        let left = self.evaluate(&expr.left)?;
+        let left = self.evaluate(self.ctx.expr.get(expr.left))?;
 
         if (expr.operator.kind == Or && left.is_truthy())
             || (expr.operator.kind == And && !left.is_truthy())
         {
             Ok(left)
         } else {
-            self.evaluate(&expr.right)
+            self.evaluate(self.ctx.expr.get(expr.right))
         }
     }
 
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Output {
-        let callee = self.evaluate(&expr.callee)?;
-        for expr in &expr.arguments {
-            let arg = self.evaluate(expr)?;
+        let callee = self.evaluate(self.ctx.expr.get(expr.callee))?;
+        for &expr in &expr.arguments {
+            let arg = self.evaluate(self.ctx.expr.get(expr))?;
             self.arguments_buffer.push(arg)
         }
 
@@ -205,7 +211,7 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output {
-        let object = self.evaluate(&expr.object)?;
+        let object = self.evaluate(self.ctx.expr.get(expr.object))?;
         if let LoxObject::Instance(instance) = object {
             instance.get(&expr.name, &mut self.acell_owner)
         } else {
@@ -217,10 +223,10 @@ impl ExprVisitor for Interpreter {
     }
 
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output {
-        let object = self.evaluate(&expr.object)?;
+        let object = self.evaluate(self.ctx.expr.get(expr.object))?;
 
         if let LoxObject::Instance(instance) = object {
-            let value = self.evaluate(&expr.value)?;
+            let value = self.evaluate(self.ctx.expr.get(expr.value))?;
             instance.set(&expr.name, value.clone(), &mut self.acell_owner);
             Ok(value)
         } else {
@@ -263,33 +269,37 @@ impl ExprVisitor for Interpreter {
         use std::fmt::Write;
 
         let mut output = String::new();
-        for subexpr in &expr.string {
-            let _ = write!(&mut output, "{}", self.evaluate(subexpr)?);
+        for &subexpr in &expr.string {
+            let _ = write!(
+                &mut output,
+                "{}",
+                self.evaluate(self.ctx.expr.get(subexpr))?
+            );
         }
 
         Ok(LoxObject::string(output.into()))
     }
 }
 
-impl StmtVisitor for Interpreter {
+impl StmtVisitor for Interpreter<'_> {
     type Output = Result<(), ControlFlow>;
 
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {
-        self.evaluate(&stmt.expression)?;
+        self.evaluate(self.ctx.expr.get(stmt.expression))?;
         Ok(())
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Output {
-        let value = self.evaluate(&stmt.expression)?;
+        let value = self.evaluate(self.ctx.expr.get(stmt.expression))?;
         println!("{}", value);
         Ok(())
     }
 
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Self::Output {
-        let initializer = stmt
-            .initializer
-            .as_ref()
-            .map_or_else(|| Ok(LoxObject::nil()), |expr| self.evaluate(expr))?;
+        let initializer = stmt.initializer.map_or_else(
+            || Ok(LoxObject::nil()),
+            |expr| self.evaluate(self.ctx.expr.get(expr)),
+        )?;
 
         self.environment.define(initializer, &mut self.acell_owner);
         Ok(())
@@ -303,7 +313,7 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output {
-        let condition = self.evaluate(&stmt.condition)?;
+        let condition = self.evaluate(self.ctx.expr.get(stmt.condition))?;
         if condition.is_truthy() {
             self.execute(&stmt.then_branch)?;
         } else if let Some(else_branch) = &stmt.else_branch {
@@ -314,7 +324,10 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
-        while self.evaluate(&stmt.condition)?.is_truthy() {
+        while self
+            .evaluate(self.ctx.expr.get(stmt.condition))?
+            .is_truthy()
+        {
             match self.execute(&stmt.body) {
                 Err(ControlFlow::Break) => return Ok(()),
                 err @ Err(_) => return err,
@@ -337,7 +350,10 @@ impl StmtVisitor for Interpreter {
     }
 
     fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Self::Output {
-        let value = stmt.value.as_ref().map(|e| self.evaluate(e)).transpose()?;
+        let value = stmt
+            .value
+            .map(|e| self.evaluate(self.ctx.expr.get(e)))
+            .transpose()?;
         Err(ControlFlow::return_(value))
     }
 

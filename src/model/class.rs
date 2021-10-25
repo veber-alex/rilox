@@ -40,7 +40,7 @@ impl LoxClass {
             .or_else(|| self.0.superclass.as_ref().and_then(|c| c.find_method(name)))
     }
 
-    pub fn call(&self, interpreter: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
+    pub fn call(&self, interpreter: &mut Interpreter<'_>) -> Result<LoxObject, ControlFlow> {
         let instance = LoxInstance::new(self.clone());
         let initializer = self.find_method("init");
 

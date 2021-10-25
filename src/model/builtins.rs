@@ -10,7 +10,7 @@ use std::time::SystemTime;
 pub struct Clock;
 
 impl BuiltinFn for Clock {
-    fn call(&self, _: &mut Interpreter) -> Result<LoxObject, ControlFlow> {
+    fn call(&self, _: &mut Interpreter<'_>) -> Result<LoxObject, ControlFlow> {
         let time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
@@ -34,7 +34,7 @@ impl Display for Clock {
     }
 }
 
-pub fn install_builtins(interpreter: &mut Interpreter, resolver: &mut Resolver) {
+pub fn install_builtins(interpreter: &mut Interpreter<'_>, resolver: &mut Resolver<'_>) {
     let clock: &'static dyn BuiltinFn = &Clock;
 
     let builtins = [clock];

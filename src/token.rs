@@ -43,7 +43,7 @@ macro_rules! T {
     ('*') => {TokenKind::Star};
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub lexeme: Rc<str>,

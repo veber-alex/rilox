@@ -1,3 +1,4 @@
+use crate::arena::Id;
 use crate::expr::{Expr, VariableExpr};
 use crate::token::Token;
 use std::rc::Rc;
@@ -19,18 +20,18 @@ pub trait StmtVisitor {
 
 #[derive(Debug)]
 pub struct ExprStmt {
-    pub expression: Expr,
+    pub expression: Id<Expr>,
 }
 
 #[derive(Debug)]
 pub struct PrintStmt {
-    pub expression: Expr,
+    pub expression: Id<Expr>,
 }
 
 #[derive(Debug)]
 pub struct VarStmt {
     pub name: Token,
-    pub initializer: Option<Expr>,
+    pub initializer: Option<Id<Expr>>,
 }
 
 #[derive(Debug)]
@@ -40,14 +41,14 @@ pub struct BlockStmt {
 
 #[derive(Debug)]
 pub struct IfStmt {
-    pub condition: Expr,
+    pub condition: Id<Expr>,
     pub then_branch: Stmt,
     pub else_branch: Option<Stmt>,
 }
 
 #[derive(Debug)]
 pub struct WhileStmt {
-    pub condition: Expr,
+    pub condition: Id<Expr>,
     pub body: Stmt,
 }
 
@@ -72,7 +73,7 @@ impl PartialEq for UnboxedFunStmt {
 #[derive(Debug)]
 pub struct ReturnStmt {
     pub keyword: Token,
-    pub value: Option<Expr>,
+    pub value: Option<Id<Expr>>,
 }
 
 #[derive(Debug)]
@@ -114,19 +115,19 @@ impl Stmt {
         }
     }
 
-    pub fn expr(expression: Expr) -> Stmt {
+    pub fn expr(expression: Id<Expr>) -> Stmt {
         Stmt::Expr(ExprStmt { expression })
     }
 
-    pub fn print(expression: Expr) -> Stmt {
+    pub fn print(expression: Id<Expr>) -> Stmt {
         Stmt::Print(PrintStmt { expression })
     }
 
-    pub fn return_stmt(keyword: Token, value: Option<Expr>) -> Self {
+    pub fn return_stmt(keyword: Token, value: Option<Id<Expr>>) -> Self {
         Stmt::Return(ReturnStmt { keyword, value })
     }
 
-    pub fn var(name: Token, initializer: Option<Expr>) -> Stmt {
+    pub fn var(name: Token, initializer: Option<Id<Expr>>) -> Stmt {
         Stmt::Var(VarStmt { name, initializer })
     }
 
@@ -134,7 +135,7 @@ impl Stmt {
         Stmt::Block(BlockStmt { statements })
     }
 
-    pub fn if_else(condition: Expr, then_branch: Stmt, else_branch: Option<Stmt>) -> Stmt {
+    pub fn if_else(condition: Id<Expr>, then_branch: Stmt, else_branch: Option<Stmt>) -> Stmt {
         Stmt::If(Box::new(IfStmt {
             condition,
             then_branch,
@@ -142,7 +143,7 @@ impl Stmt {
         }))
     }
 
-    pub fn while_loop(condition: Expr, body: Stmt) -> Stmt {
+    pub fn while_loop(condition: Id<Expr>, body: Stmt) -> Stmt {
         Stmt::While(Box::new(WhileStmt { condition, body }))
     }
 

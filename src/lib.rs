@@ -1,15 +1,18 @@
-#![deny(rust_2018_idioms)]
+#![warn(rust_2018_idioms)]
 
+use context::Context;
 use interpreter::Interpreter;
 use model::builtins::install_builtins;
 use parser::Parser;
 use resolver::Resolver;
 use scanner::Scanner;
 use std::fmt::Debug;
-use std::io::BufRead;
+// use std::io::BufRead;
 use std::{io, process};
 use stmt::Stmt;
 
+mod arena;
+mod context;
 mod environment;
 mod expr;
 mod interpreter;
@@ -22,11 +25,13 @@ mod stmt;
 mod token;
 
 #[derive(Debug, Default)]
-pub struct Rilox;
+pub struct Rilox {
+    ctx: Context,
+}
 
 impl Rilox {
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     pub fn run_file(&mut self, path: &str) -> Result<(), io::Error> {
@@ -43,22 +48,23 @@ impl Rilox {
     }
 
     pub fn run_prompt(&mut self) -> Result<(), io::Error> {
-        let mut buffer = String::new();
-        let stdin = io::stdin();
-        let mut handle = stdin.lock();
+        todo!()
+        // let mut buffer = String::new();
+        // let stdin = io::stdin();
+        // let mut handle = stdin.lock();
 
-        while handle.read_line(&mut buffer)? != 0 {
-            // Ignore errors in REPL
-            if let Ok((mut interpreter, stmts)) = self.prepare_run(buffer.trim()) {
-                interpreter.interpret(&stmts);
-            }
-            buffer.clear();
-        }
+        // while handle.read_line(&mut buffer)? != 0 {
+        //     // Ignore errors in REPL
+        //     if let Ok((mut interpreter, stmts)) = self.prepare_run(buffer.trim()) {
+        //         interpreter.interpret(&stmts);
+        //     }
+        //     buffer.clear();
+        // }
 
-        Ok(())
+        // Ok(())
     }
 
-    fn prepare_run(&mut self, source: &str) -> Result<(Interpreter, Vec<Stmt>), ()> {
+    fn prepare_run(&mut self, source: &str) -> Result<(Interpreter<'_>, Vec<Stmt>), ()> {
         // Scanning
         let scanner = Scanner::new(source);
         let (tokens, had_scan_error) = scanner.scan_tokens();
@@ -69,13 +75,13 @@ impl Rilox {
         }
 
         // Parsing
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(tokens, &mut self.ctx);
         let stmts = parser.parse().ok_or(())?;
 
         // Resolving
         // FIXME: This is ugly
-        let mut interpreter = Interpreter::new();
-        let mut resolver = Resolver::new();
+        let mut interpreter = Interpreter::new(&self.ctx);
+        let mut resolver = Resolver::new(&self.ctx);
         install_builtins(&mut interpreter, &mut resolver);
         resolver.resolve(&*stmts);
         if resolver.had_error {

@@ -1,3 +1,5 @@
+use crate::arena::Id;
+use crate::context::Context;
 use crate::expr::{Expr, VariableExpr};
 use crate::model::object::LoxObject;
 use crate::report_error;
@@ -26,14 +28,16 @@ impl Display for FunctionKind {
 }
 
 #[derive(Debug)]
-pub struct Parser {
+pub struct Parser<'a> {
     tokens: Peekable<IntoIter<Token>>,
+    ctx: &'a mut Context,
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(tokens: Vec<Token>, ctx: &'a mut Context) -> Self {
         Self {
             tokens: tokens.into_iter().peekable(),
+            ctx,
         }
     }
 
@@ -191,7 +195,7 @@ impl Parser {
             .is_some()
             .then(|| self.expression())
             .transpose()?
-            .unwrap_or_else(|| Expr::literal(LoxObject::bool(true)));
+            .unwrap_or_else(|| self.ctx.expr.alloc(Expr::literal(LoxObject::bool(true))));
         self.verify(Semicolon, "Expect ';' after loop condition.")?;
 
         let increment = self
@@ -250,106 +254,114 @@ impl Parser {
         Ok(statements)
     }
 
-    fn expression(&mut self) -> Result<Expr, ParserError> {
+    fn expression(&mut self) -> Result<Id<Expr>, ParserError> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<Expr, ParserError> {
+    fn assignment(&mut self) -> Result<Id<Expr>, ParserError> {
         // parse l-value expression
-        let expr = self.or()?;
+        let expr_id = self.or()?;
 
         // Check for `=` token
         if let Some(token) = self.get(Equal) {
             // parse r-value expression
             let value = self.assignment()?;
             // verify l-value is a variable or get expression
-            match expr {
-                Expr::Variable(var) => Ok(Expr::assign(var.name, value)),
-                Expr::Get(get) => Ok(Expr::set(get.object, get.name, value)),
+            match self.ctx.expr.get(expr_id) {
+                Expr::Variable(var) => {
+                    let name = var.name.clone();
+                    Ok(self.ctx.expr.alloc(Expr::assign(name, value)))
+                }
+                Expr::Get(get) => {
+                    let name = get.name.clone();
+                    let object = get.object;
+                    Ok(self.ctx.expr.alloc(Expr::set(object, name, value)))
+                }
                 _ => Err(Self::error(&token, "Invalid assignment target.")),
             }
         } else {
-            Ok(expr)
+            Ok(expr_id)
         }
     }
 
-    fn or(&mut self) -> Result<Expr, ParserError> {
+    fn or(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.and()?;
 
         while let Some(operator) = self.get(Or) {
             let right = self.and()?;
-            expr = Expr::logical(expr, operator, right);
+            expr = self.ctx.expr.alloc(Expr::logical(expr, operator, right));
         }
 
         Ok(expr)
     }
 
-    fn and(&mut self) -> Result<Expr, ParserError> {
+    fn and(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.equality()?;
         while let Some(operator) = self.get(And) {
             let right = self.equality()?;
-            expr = Expr::logical(expr, operator, right);
+            expr = self.ctx.expr.alloc(Expr::logical(expr, operator, right));
         }
 
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<Expr, ParserError> {
+    fn equality(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.comparison()?;
         while let Some(operator) = self.get([BangEqual, EqualEqual]) {
             let right = self.comparison()?;
-            expr = Expr::binary(expr, operator, right)
+            expr = self.ctx.expr.alloc(Expr::binary(expr, operator, right))
         }
 
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<Expr, ParserError> {
+    fn comparison(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.term()?;
         while let Some(operator) = self.get([Greater, GreaterEqual, Less, LessEqual]) {
             let right = self.term()?;
-            expr = Expr::binary(expr, operator, right)
+            expr = self.ctx.expr.alloc(Expr::binary(expr, operator, right))
         }
 
         Ok(expr)
     }
 
-    fn term(&mut self) -> Result<Expr, ParserError> {
+    fn term(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.factor()?;
         while let Some(operator) = self.get([Minus, Plus]) {
             let right = self.factor()?;
-            expr = Expr::binary(expr, operator, right)
+            expr = self.ctx.expr.alloc(Expr::binary(expr, operator, right))
         }
 
         Ok(expr)
     }
 
-    fn factor(&mut self) -> Result<Expr, ParserError> {
+    fn factor(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.unary()?;
         while let Some(operator) = self.get([Slash, Star]) {
             let right = self.unary()?;
-            expr = Expr::binary(expr, operator, right)
+            expr = self.ctx.expr.alloc(Expr::binary(expr, operator, right))
         }
 
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<Expr, ParserError> {
+    fn unary(&mut self) -> Result<Id<Expr>, ParserError> {
         if let Some(operator) = self.get([Bang, Minus]) {
-            Ok(Expr::unary(operator, self.unary()?))
+            let right = self.unary()?;
+            Ok(self.ctx.expr.alloc(Expr::unary(operator, right)))
         } else {
             self.call()
         }
     }
 
-    fn call(&mut self) -> Result<Expr, ParserError> {
+    fn call(&mut self) -> Result<Id<Expr>, ParserError> {
         let mut expr = self.primary()?;
         loop {
             if self.eat(LeftParen) {
                 expr = self.finish_call(expr)?;
             } else if self.eat(Dot) {
                 let name = self.verify(Identifier, "Expect property name after '.'.")?;
-                expr = Expr::get(name, expr);
+                expr = self.ctx.expr.alloc(Expr::get(name, expr));
             } else {
                 break;
             }
@@ -358,7 +370,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParserError> {
+    fn finish_call(&mut self, callee: Id<Expr>) -> Result<Id<Expr>, ParserError> {
         let mut arguments = vec![];
         if self.peek(|t| t != RightParen).is_some() {
             loop {
@@ -376,10 +388,10 @@ impl Parser {
         }
         let paren = self.verify(RightParen, "Expect ')' after arguments.")?;
 
-        Ok(Expr::call(callee, paren, arguments))
+        Ok(self.ctx.expr.alloc(Expr::call(callee, paren, arguments)))
     }
 
-    fn primary(&mut self) -> Result<Expr, ParserError> {
+    fn primary(&mut self) -> Result<Id<Expr>, ParserError> {
         let token = self.tokens.next().expect("Tokens ended without Eof Token");
 
         let expr = match token.kind {
@@ -412,7 +424,11 @@ impl Parser {
                     }
 
                     if let Some(token) = self.get(Str) {
-                        parts.push(Expr::literal(LoxObject::string(token.lexeme)))
+                        parts.push(
+                            self.ctx
+                                .expr
+                                .alloc(Expr::literal(LoxObject::string(token.lexeme))),
+                        )
                     }
 
                     if self.eat(LeftBrace) {
@@ -425,12 +441,12 @@ impl Parser {
             _ => return Err(Self::error(&token, "Expect expression.")),
         };
 
-        Ok(expr)
+        Ok(self.ctx.expr.alloc(expr))
     }
 }
 
 // Helper functions
-impl Parser {
+impl Parser<'_> {
     fn verify<T>(&mut self, kind: TokenKind, message: T) -> Result<Token, ParserError>
     where
         T: Into<Cow<'static, str>>,

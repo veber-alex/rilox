@@ -1,3 +1,4 @@
+use crate::context::Context;
 use crate::expr::{
     AssignExpr, BinaryExpr, CallExpr, Expr, ExprHasLocation, ExprVisitor, FstringExpr, GetExpr,
     GroupingExpr, LiteralExpr, LogicalExpr, SetExpr, SuperExpr, ThisExpr, UnaryExpr, VariableExpr,
@@ -37,29 +38,29 @@ enum LoopKind {
 }
 
 pub trait Resolvable {
-    fn resolve(&self, resolver: &mut Resolver);
+    fn resolve(&self, resolver: &mut Resolver<'_>);
 }
 
 impl Resolvable for Stmt {
-    fn resolve(&self, resolver: &mut Resolver) {
+    fn resolve(&self, resolver: &mut Resolver<'_>) {
         self.accept(resolver)
     }
 }
 
 impl Resolvable for Expr {
-    fn resolve(&self, resolver: &mut Resolver) {
+    fn resolve(&self, resolver: &mut Resolver<'_>) {
         self.accept(resolver)
     }
 }
 
 impl Resolvable for VariableExpr {
-    fn resolve(&self, resolver: &mut Resolver) {
+    fn resolve(&self, resolver: &mut Resolver<'_>) {
         resolver.visit_variable_expr(self)
     }
 }
 
 impl Resolvable for [Stmt] {
-    fn resolve(&self, resolver: &mut Resolver) {
+    fn resolve(&self, resolver: &mut Resolver<'_>) {
         for stmt in self {
             stmt.accept(resolver);
         }
@@ -81,22 +82,24 @@ impl Scope {
 }
 
 #[derive(Debug)]
-pub struct Resolver {
+pub struct Resolver<'a> {
     pub scopes: Vec<Scope>,
     current_function: FunctionKind,
     current_class: ClassKind,
     current_loop: LoopKind,
     pub had_error: bool,
+    ctx: &'a Context,
 }
 
-impl Resolver {
-    pub fn new() -> Self {
+impl<'a> Resolver<'a> {
+    pub fn new(ctx: &'a Context) -> Self {
         Self {
             scopes: vec![Scope::default()],
             current_function: FunctionKind::None,
             current_class: ClassKind::None,
             current_loop: LoopKind::None,
             had_error: false,
+            ctx,
         }
     }
 
@@ -105,7 +108,10 @@ impl Resolver {
         self.had_error = true;
     }
 
-    pub fn resolve<T: Resolvable + ?Sized>(&mut self, resolvable: &T) {
+    pub fn resolve<T>(&mut self, resolvable: &T)
+    where
+        T: Resolvable + ?Sized,
+    {
         resolvable.resolve(self)
     }
 
@@ -168,28 +174,22 @@ impl Resolver {
     }
 }
 
-impl Default for Resolver {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ExprVisitor for Resolver {
+impl ExprVisitor for Resolver<'_> {
     type Output = ();
 
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
-        self.resolve(&expr.left);
-        self.resolve(&expr.right)
+        self.resolve(self.ctx.expr.get(expr.left));
+        self.resolve(self.ctx.expr.get(expr.right));
     }
 
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> Self::Output {
-        self.resolve(&expr.expression)
+        self.resolve(self.ctx.expr.get(expr.expression))
     }
 
     fn visit_literal_expr(&mut self, _expr: &LiteralExpr) -> Self::Output {}
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> Self::Output {
-        self.resolve(&expr.right)
+        self.resolve(self.ctx.expr.get(expr.right))
     }
 
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> Self::Output {
@@ -197,30 +197,30 @@ impl ExprVisitor for Resolver {
     }
 
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> Self::Output {
-        self.resolve(&expr.value);
+        self.resolve(self.ctx.expr.get(expr.value));
         self.resolve_local(expr, &expr.name);
     }
 
     fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> Self::Output {
-        self.resolve(&expr.left);
-        self.resolve(&expr.right)
+        self.resolve(self.ctx.expr.get(expr.left));
+        self.resolve(self.ctx.expr.get(expr.right));
     }
 
     fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Output {
-        self.resolve(&expr.callee);
+        self.resolve(self.ctx.expr.get(expr.callee));
 
-        for arg in &expr.arguments {
-            self.resolve(arg);
+        for &arg in &expr.arguments {
+            self.resolve(self.ctx.expr.get(arg));
         }
     }
 
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output {
-        self.resolve(&expr.object);
+        self.resolve(self.ctx.expr.get(expr.object));
     }
 
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output {
-        self.resolve(&expr.value);
-        self.resolve(&expr.object);
+        self.resolve(self.ctx.expr.get(expr.value));
+        self.resolve(self.ctx.expr.get(expr.object));
     }
 
     fn visit_this_expr(&mut self, expr: &ThisExpr) -> Self::Output {
@@ -249,27 +249,27 @@ impl ExprVisitor for Resolver {
     }
 
     fn visit_fstring_expr(&mut self, expr: &FstringExpr) -> Self::Output {
-        for subexpr in &expr.string {
-            self.resolve(subexpr)
+        for &subexpr in &expr.string {
+            self.resolve(self.ctx.expr.get(subexpr))
         }
     }
 }
 
-impl StmtVisitor for Resolver {
+impl StmtVisitor for Resolver<'_> {
     type Output = ();
 
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {
-        self.resolve(&stmt.expression);
+        self.resolve(self.ctx.expr.get(stmt.expression));
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Output {
-        self.resolve(&stmt.expression);
+        self.resolve(self.ctx.expr.get(stmt.expression));
     }
 
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Self::Output {
         self.declare(&stmt.name);
-        if let Some(initializer) = &stmt.initializer {
-            self.resolve(initializer);
+        if let Some(initializer) = stmt.initializer {
+            self.resolve(self.ctx.expr.get(initializer));
         }
         self.define(&stmt.name);
     }
@@ -281,7 +281,7 @@ impl StmtVisitor for Resolver {
     }
 
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Self::Output {
-        self.resolve(&stmt.condition);
+        self.resolve(self.ctx.expr.get(stmt.condition));
         self.resolve(&stmt.then_branch);
         if let Some(else_branch) = &stmt.else_branch {
             self.resolve(else_branch);
@@ -291,7 +291,7 @@ impl StmtVisitor for Resolver {
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Self::Output {
         let current_loop = mem::replace(&mut self.current_loop, LoopKind::Loop);
 
-        self.resolve(&stmt.condition);
+        self.resolve(self.ctx.expr.get(stmt.condition));
         self.resolve(&stmt.body);
 
         self.current_loop = current_loop;
@@ -320,14 +320,14 @@ impl StmtVisitor for Resolver {
                 "Can't return from top-level code.".into(),
             )
         }
-        if let Some(value) = &stmt.value {
+        if let Some(value) = stmt.value {
             if self.current_function == FunctionKind::Initializer {
                 self.error(
                     stmt.keyword.line,
                     "Can't return a value from an initializer.".into(),
                 )
             }
-            self.resolve(value);
+            self.resolve(self.ctx.expr.get(value));
         }
     }
 
