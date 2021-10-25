@@ -1,5 +1,3 @@
-use ordered_float::OrderedFloat;
-
 use super::callable::BuiltinFn;
 use crate::interpreter::{ControlFlow, Interpreter};
 use crate::model::object::LoxObject;
@@ -18,7 +16,7 @@ impl BuiltinFn for Clock {
             .unwrap_or_default()
             .as_millis() as f64;
 
-        Ok(LoxObject::number(OrderedFloat(time)))
+        Ok(LoxObject::number(time))
     }
 
     fn arity(&self) -> usize {

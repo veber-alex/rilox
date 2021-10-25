@@ -6,7 +6,6 @@ edition = "2018"
 
 
 [dependencies]
-ordered-float = "2.8.0"
 qcell = "0.4.3"
 rustc-hash = "1.1.0"
 

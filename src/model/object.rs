@@ -6,16 +6,15 @@ use crate::environment::Environment;
 use crate::model::callable::LoxCallable;
 use crate::stmt::FunStmt;
 
-use ordered_float::OrderedFloat;
 use rustc_hash::FxHashMap;
 
 use std::fmt::Display;
 use std::ops::Deref;
 use std::rc::Rc;
 
-#[derive(Debug, Eq)]
+#[derive(Debug)]
 pub enum LoxObjectEnum {
-    Number(OrderedFloat<f64>),
+    Number(f64),
     Nil,
     Bool(bool),
     StaticString(&'static str),
@@ -40,7 +39,7 @@ impl PartialEq for LoxObjectEnum {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LoxObject(pub Rc<LoxObjectEnum>);
 
 impl Deref for LoxObject {
@@ -58,7 +57,7 @@ impl Display for LoxObject {
 }
 
 impl LoxObject {
-    pub fn number(value: OrderedFloat<f64>) -> LoxObject {
+    pub fn number(value: f64) -> LoxObject {
         LoxObject(Rc::new(LoxObjectEnum::Number(value)))
     }
 
