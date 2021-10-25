@@ -10,9 +10,9 @@ use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct LoxClassInner {
-    pub name: Rc<str>,
+    pub name: &'static str,
     pub superclass: Option<LoxClass>,
-    pub methods: FxHashMap<Rc<str>, LoxFunction>,
+    pub methods: FxHashMap<&'static str, LoxFunction>,
 }
 
 #[derive(Debug, Clone)]
@@ -20,9 +20,9 @@ pub struct LoxClass(pub Rc<LoxClassInner>);
 
 impl LoxClass {
     pub fn new(
-        name: Rc<str>,
+        name: &'static str,
         superclass: Option<Self>,
-        methods: FxHashMap<Rc<str>, LoxFunction>,
+        methods: FxHashMap<&'static str, LoxFunction>,
     ) -> Self {
         let inner = LoxClassInner {
             name,

@@ -195,7 +195,11 @@ impl<'a> Parser<'a> {
             .is_some()
             .then(|| self.expression())
             .transpose()?
-            .unwrap_or_else(|| self.ctx.expr.alloc(Expr::literal(LoxObject::bool(true))));
+            .unwrap_or_else(|| {
+                self.ctx
+                    .expr
+                    .alloc(Expr::literal(LoxObject::bool(true)))
+            });
         self.verify(Semicolon, "Expect ';' after loop condition.")?;
 
         let increment = self
@@ -269,11 +273,11 @@ impl<'a> Parser<'a> {
             // verify l-value is a variable or get expression
             match self.ctx.expr.get(expr_id) {
                 Expr::Variable(var) => {
-                    let name = var.name.clone();
+                    let name = var.name;
                     Ok(self.ctx.expr.alloc(Expr::assign(name, value)))
                 }
                 Expr::Get(get) => {
-                    let name = get.name.clone();
+                    let name = get.name;
                     let object = get.object;
                     Ok(self.ctx.expr.alloc(Expr::set(object, name, value)))
                 }
@@ -401,8 +405,8 @@ impl<'a> Parser<'a> {
             Number => Expr::literal(LoxObject::number(
                 token.lexeme.parse().expect("Incorrect Token for f64"),
             )),
-            Str => Expr::literal(LoxObject::string(
-                token.lexeme[1..token.lexeme.len() - 1].into(),
+            Str => Expr::literal(LoxObject::static_string(
+                &token.lexeme[1..token.lexeme.len() - 1],
             )),
             Identifier => Expr::variable(token),
             This => Expr::this(token),
@@ -427,7 +431,7 @@ impl<'a> Parser<'a> {
                         parts.push(
                             self.ctx
                                 .expr
-                                .alloc(Expr::literal(LoxObject::string(token.lexeme))),
+                                .alloc(Expr::literal(LoxObject::static_string(token.lexeme))),
                         )
                     }
 

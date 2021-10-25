@@ -14,7 +14,6 @@ use rustc_hash::FxHashMap;
 
 use std::borrow::Cow;
 use std::mem;
-use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FunctionKind {
@@ -69,12 +68,12 @@ impl Resolvable for [Stmt] {
 
 #[derive(Debug, Default)]
 pub struct Scope {
-    map: FxHashMap<Rc<str>, (bool, usize)>,
+    map: FxHashMap<&'static str, (bool, usize)>,
     var_cnt: usize,
 }
 
 impl Scope {
-    pub fn insert(&mut self, key: Rc<str>, value: bool) {
+    pub fn insert(&mut self, key: &'static str, value: bool) {
         let current_var_cnt = self.var_cnt;
         self.map.insert(key, (value, current_var_cnt));
         self.var_cnt += 1;
@@ -132,7 +131,7 @@ impl<'a> Resolver<'a> {
                     "Already a variable with this name in this scope.".into(),
                 );
             } else {
-                scope.insert(name.lexeme.clone(), false);
+                scope.insert(name.lexeme, false);
             }
         }
     }
@@ -349,11 +348,11 @@ impl StmtVisitor for Resolver<'_> {
 
         // Scope for 'super'
         if stmt.superclass.is_some() {
-            self.begin_scope().insert("super".into(), true);
+            self.begin_scope().insert("super", true);
         }
 
         // Scope for class methods
-        self.begin_scope().insert("this".into(), true);
+        self.begin_scope().insert("this", true);
 
         for method in &stmt.methods {
             let declaration = if &*method.name.lexeme == "init" {

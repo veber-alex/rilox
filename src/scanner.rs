@@ -3,9 +3,9 @@ use crate::report_error;
 use crate::token::{Token, TokenKind};
 use std::str::CharIndices;
 
-pub struct Scanner<'a> {
-    source: &'a str,
-    source_iter: Peekable2<CharIndices<'a>>,
+pub struct Scanner {
+    source: &'static str,
+    source_iter: Peekable2<CharIndices<'static>>,
     tokens: Vec<Token>,
     start: usize,
     current: usize,
@@ -14,8 +14,8 @@ pub struct Scanner<'a> {
     in_fstring_expr: bool,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl Scanner {
+    pub fn new(source: &'static str) -> Self {
         Self {
             source,
             source_iter: Peekable2::new(source.char_indices()),

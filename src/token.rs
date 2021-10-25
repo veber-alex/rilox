@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::rc::Rc;
 
 #[rustfmt::skip]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -43,19 +42,15 @@ macro_rules! T {
     ('*') => {TokenKind::Star};
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token {
     pub kind: TokenKind,
-    pub lexeme: Rc<str>,
+    pub lexeme: &'static str,
     pub line: usize,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: &str, line: usize) -> Self {
-        Self {
-            kind,
-            lexeme: Rc::from(lexeme),
-            line,
-        }
+    pub fn new(kind: TokenKind, lexeme: &'static str, line: usize) -> Self {
+        Self { kind, lexeme, line }
     }
 }

@@ -7,10 +7,8 @@ use parser::Parser;
 use resolver::Resolver;
 use scanner::Scanner;
 use std::fmt::Debug;
-// use std::io::BufRead;
 use std::{io, process};
 use stmt::Stmt;
-
 mod arena;
 mod context;
 mod environment;
@@ -18,7 +16,7 @@ mod expr;
 mod interpreter;
 mod model;
 mod parser;
-pub mod peek2;
+mod peek2;
 mod resolver;
 mod scanner;
 mod stmt;
@@ -35,9 +33,10 @@ impl Rilox {
     }
 
     pub fn run_file(&mut self, path: &str) -> Result<(), io::Error> {
-        let source = std::fs::read_to_string(path)?;
+        // FIXME: reverse memory leak
+        let source: &'static str = Box::leak(std::fs::read_to_string(path)?.into_boxed_str());
 
-        if let Ok((mut interpreter, stmts)) = self.prepare_run(&source) {
+        if let Ok((mut interpreter, stmts)) = self.prepare_run(source) {
             if interpreter.interpret(&stmts).is_none() {
                 process::exit(66)
             }
@@ -64,7 +63,7 @@ impl Rilox {
         // Ok(())
     }
 
-    fn prepare_run(&mut self, source: &str) -> Result<(Interpreter<'_>, Vec<Stmt>), ()> {
+    fn prepare_run(&mut self, source: &'static str) -> Result<(Interpreter<'_>, Vec<Stmt>), ()> {
         // Scanning
         let scanner = Scanner::new(source);
         let (tokens, had_scan_error) = scanner.scan_tokens();

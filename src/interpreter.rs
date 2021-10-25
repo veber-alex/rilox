@@ -7,7 +7,7 @@ use crate::expr::{
 };
 use crate::model::callable::LoxCallable;
 use crate::model::function::LoxFunction;
-use crate::model::object::LoxObject;
+use crate::model::object::{LoxObject, LoxObjectEnum};
 use crate::report_error;
 use crate::stmt::{
     BlockStmt, BreakStmt, ClassStmt, ExprStmt, FunStmt, IfStmt, PrintStmt, ReturnStmt, Stmt,
@@ -86,14 +86,22 @@ impl ExprVisitor for Interpreter<'_> {
     type Output = Result<LoxObject, ControlFlow>;
 
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> Self::Output {
-        let left = self.evaluate(self.ctx.expr.get(expr.left))?;
-        let right = self.evaluate(self.ctx.expr.get(expr.right))?;
+        let left = match self.evaluate(self.ctx.expr.get(expr.left)) {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
+        let right = match self.evaluate(self.ctx.expr.get(expr.right)) {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
 
         match expr.operator.kind {
             BangEqual => Ok(LoxObject::bool(left != right)),
             EqualEqual => Ok(LoxObject::bool(left == right)),
             Minus | Slash | Star | Greater | GreaterEqual | Less | LessEqual => {
-                if let (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) = (left, right) {
+                if let (LoxObjectEnum::Number(lvalue), LoxObjectEnum::Number(rvalue)) =
+                    (&*left, &*right)
+                {
                     Ok(match expr.operator.kind {
                         Minus => LoxObject::number(lvalue - rvalue),
                         Slash => LoxObject::number(lvalue / rvalue),
@@ -111,12 +119,26 @@ impl ExprVisitor for Interpreter<'_> {
                     ))
                 }
             }
-            Plus => match (left, right) {
-                (LoxObject::Number(lvalue), LoxObject::Number(rvalue)) => {
+            Plus => match (&*left, &*right) {
+                // 2 numbers
+                (LoxObjectEnum::Number(lvalue), LoxObjectEnum::Number(rvalue)) => {
                     Ok(LoxObject::number(lvalue + rvalue))
                 }
-                (LoxObject::String(lvalue), LoxObject::String(rvalue)) => {
-                    Ok(LoxObject::string(format!("{}{}", lvalue, rvalue).into()))
+                // 2 dynamic strings
+                (LoxObjectEnum::String(lvalue), LoxObjectEnum::String(rvalue)) => {
+                    Ok(LoxObject::string(format!("{}{}", lvalue, rvalue)))
+                }
+                // 2 static strings
+                (LoxObjectEnum::StaticString(lvalue), LoxObjectEnum::StaticString(rvalue)) => {
+                    Ok(LoxObject::string(format!("{}{}", lvalue, rvalue)))
+                }
+                // dynamic + static string
+                (LoxObjectEnum::String(lvalue), LoxObjectEnum::StaticString(rvalue)) => {
+                    Ok(LoxObject::string(format!("{}{}", lvalue, rvalue)))
+                }
+                // static + dynamic string
+                (LoxObjectEnum::StaticString(lvalue), LoxObjectEnum::String(rvalue)) => {
+                    Ok(LoxObject::string(format!("{}{}", lvalue, rvalue)))
                 }
                 _ => Err(ControlFlow::abort(
                     expr.operator.line,
@@ -139,7 +161,7 @@ impl ExprVisitor for Interpreter<'_> {
         let right = self.evaluate(self.ctx.expr.get(expr.right))?;
         match expr.operator.kind {
             Minus => {
-                if let LoxObject::Number(value) = right {
+                if let LoxObjectEnum::Number(value) = &*right.0 {
                     Ok(LoxObject::number(-value))
                 } else {
                     Err(ControlFlow::abort(
@@ -191,7 +213,7 @@ impl ExprVisitor for Interpreter<'_> {
             self.arguments_buffer.push(arg)
         }
 
-        if let LoxObject::Callable(callable) = callee {
+        if let LoxObjectEnum::Callable(callable) = &*callee {
             let args_len = self.arguments_buffer.len();
             let arity = callable.arity();
             if args_len == arity {
@@ -212,7 +234,7 @@ impl ExprVisitor for Interpreter<'_> {
 
     fn visit_get_expr(&mut self, expr: &GetExpr) -> Self::Output {
         let object = self.evaluate(self.ctx.expr.get(expr.object))?;
-        if let LoxObject::Instance(instance) = object {
+        if let LoxObjectEnum::Instance(instance) = &*object {
             instance.get(&expr.name, &mut self.acell_owner)
         } else {
             Err(ControlFlow::abort(
@@ -225,7 +247,7 @@ impl ExprVisitor for Interpreter<'_> {
     fn visit_set_expr(&mut self, expr: &SetExpr) -> Self::Output {
         let object = self.evaluate(self.ctx.expr.get(expr.object))?;
 
-        if let LoxObject::Instance(instance) = object {
+        if let LoxObjectEnum::Instance(instance) = &*object {
             let value = self.evaluate(self.ctx.expr.get(expr.value))?;
             instance.set(&expr.name, value.clone(), &mut self.acell_owner);
             Ok(value)
@@ -244,25 +266,27 @@ impl ExprVisitor for Interpreter<'_> {
     fn visit_super_expr(&mut self, expr: &SuperExpr) -> Self::Output {
         let loc = expr.get_location().expect("super in class without super");
 
-        let superclass = match self.environment.get_at(loc, &self.acell_owner) {
-            LoxObject::Callable(LoxCallable::Class(cls)) => cls,
+        let object = self.environment.get_at(loc, &self.acell_owner);
+        let superclass = match &*object {
+            LoxObjectEnum::Callable(LoxCallable::Class(cls)) => cls,
             _ => panic!("super outside of class"),
         };
 
         let inst_loc = Location::new(loc.distance - 1, 0);
-        let instance = match self.environment.get_at(inst_loc, &self.acell_owner) {
-            LoxObject::Instance(inst) => inst,
+        let object = self.environment.get_at(inst_loc, &self.acell_owner);
+        let instance = match &*object {
+            LoxObjectEnum::Instance(inst) => inst,
             _ => panic!("unbound method"),
         };
 
-        let method = superclass.find_method(&expr.method.lexeme).ok_or_else(|| {
+        let method = superclass.find_method(expr.method.lexeme).ok_or_else(|| {
             ControlFlow::abort(
                 expr.method.line,
                 format!("Undefined property '{}'", expr.method.lexeme),
             )
         })?;
 
-        Ok(method.bind(instance, &mut self.acell_owner).into())
+        Ok(method.bind(instance.clone(), &mut self.acell_owner).into())
     }
 
     fn visit_fstring_expr(&mut self, expr: &FstringExpr) -> Self::Output {
@@ -277,7 +301,7 @@ impl ExprVisitor for Interpreter<'_> {
             );
         }
 
-        Ok(LoxObject::string(output.into()))
+        Ok(LoxObject::string(output))
     }
 }
 
@@ -285,8 +309,10 @@ impl StmtVisitor for Interpreter<'_> {
     type Output = Result<(), ControlFlow>;
 
     fn visit_expr_stmt(&mut self, stmt: &ExprStmt) -> Self::Output {
-        self.evaluate(self.ctx.expr.get(stmt.expression))?;
-        Ok(())
+        match self.evaluate(self.ctx.expr.get(stmt.expression)) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Self::Output {
@@ -358,10 +384,10 @@ impl StmtVisitor for Interpreter<'_> {
     }
 
     fn visit_class_stmt(&mut self, stmt: &ClassStmt) -> Self::Output {
+        let object;
         let superclass = if let Some(var_expr) = &stmt.superclass {
-            if let LoxObject::Callable(LoxCallable::Class(superclass)) =
-                self.visit_variable_expr(var_expr)?
-            {
+            object = self.visit_variable_expr(var_expr)?;
+            if let LoxObjectEnum::Callable(LoxCallable::Class(superclass)) = &*object {
                 Some(superclass)
             } else {
                 return Err(ControlFlow::abort(
@@ -377,7 +403,7 @@ impl StmtVisitor for Interpreter<'_> {
             .environment
             .define(LoxObject::nil(), &mut self.acell_owner);
 
-        let enclosing = if let Some(superclass) = &superclass {
+        let enclosing = if let Some(superclass) = superclass {
             let enclosing = self.environment.clone();
             self.environment = Environment::with_enclosing(enclosing.clone());
             self.environment
@@ -392,10 +418,10 @@ impl StmtVisitor for Interpreter<'_> {
             let is_initializer = &*method.name.lexeme == "init";
             let function =
                 LoxFunction::new(method.clone(), self.environment.clone(), is_initializer);
-            methods.insert(method.name.lexeme.clone(), function);
+            methods.insert(method.name.lexeme, function);
         }
 
-        let class = LoxObject::class(stmt.name.lexeme.clone(), superclass, methods);
+        let class = LoxObject::class(stmt.name.lexeme, superclass.cloned(), methods);
 
         if let Some(enclosing) = enclosing {
             self.environment = enclosing

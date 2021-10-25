@@ -13,7 +13,7 @@ use std::rc::Rc;
 pub struct LoxInstance {
     pub class: LoxClass,
     // TODO: Replace this Rc with Gc to collect cycles
-    pub fields: Rc<ACell<FxHashMap<Rc<str>, LoxObject>>>,
+    pub fields: Rc<ACell<FxHashMap<&'static str, LoxObject>>>,
 }
 
 impl std::fmt::Debug for LoxInstance {
@@ -39,9 +39,9 @@ impl LoxInstance {
         }
 
         // method from class - bind to instance
-        if let Some(obj) = self.class.find_method(&token.lexeme) {
+        if let Some(obj) = self.class.find_method(token.lexeme) {
             let function = obj.bind(self.clone(), owner);
-            return Ok(LoxObject::Callable(LoxCallable::Function(function)));
+            return Ok(LoxObject::callable(LoxCallable::Function(function)));
         }
 
         Err(ControlFlow::abort(
@@ -51,7 +51,7 @@ impl LoxInstance {
     }
 
     pub fn set(&self, token: &Token, value: LoxObject, owner: &mut ACellOwner) {
-        owner.rw(&self.fields).insert(token.lexeme.clone(), value);
+        owner.rw(&self.fields).insert(token.lexeme, value);
     }
 }
 

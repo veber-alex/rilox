@@ -1,3 +1,5 @@
+use ordered_float::OrderedFloat;
+
 use super::callable::BuiltinFn;
 use crate::interpreter::{ControlFlow, Interpreter};
 use crate::model::object::LoxObject;
@@ -16,7 +18,7 @@ impl BuiltinFn for Clock {
             .unwrap_or_default()
             .as_millis() as f64;
 
-        Ok(LoxObject::number(time))
+        Ok(LoxObject::number(OrderedFloat(time)))
     }
 
     fn arity(&self) -> usize {
@@ -39,7 +41,7 @@ pub fn install_builtins(interpreter: &mut Interpreter<'_>, resolver: &mut Resolv
 
     let builtins = [clock];
     for obj in array::IntoIter::new(builtins) {
-        resolver.scopes[0].insert(obj.name().into(), true);
+        resolver.scopes[0].insert(obj.name(), true);
         interpreter
             .environment
             .define(obj.into(), &mut interpreter.acell_owner);

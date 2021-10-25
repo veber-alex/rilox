@@ -57,3 +57,5 @@ impl PartialEq for LoxCallable {
         }
     }
 }
+
+impl Eq for LoxCallable {}
