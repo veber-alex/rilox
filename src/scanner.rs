@@ -217,7 +217,7 @@ impl Scanner {
     }
 
     fn number(&mut self) {
-        let is_digit = |c| matches!(c, '0'..='9');
+        let is_digit = |c: char| c.is_ascii_digit();
 
         self.advance_while(is_digit);
 

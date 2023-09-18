@@ -125,7 +125,7 @@ impl<'a> Resolver<'a> {
 
     fn declare(&mut self, name: &Token) {
         if let Some(scope) = self.scopes.last_mut() {
-            if scope.map.contains_key(&*name.lexeme) {
+            if scope.map.contains_key(name.lexeme) {
                 self.error(
                     name.line,
                     "Already a variable with this name in this scope.".into(),
@@ -355,7 +355,7 @@ impl StmtVisitor for Resolver<'_> {
         self.begin_scope().insert("this", true);
 
         for method in &stmt.methods {
-            let declaration = if &*method.name.lexeme == "init" {
+            let declaration = if method.name.lexeme == "init" {
                 FunctionKind::Initializer
             } else {
                 FunctionKind::Method

@@ -415,7 +415,7 @@ impl StmtVisitor for Interpreter<'_> {
 
         let mut methods = FxHashMap::default();
         for method in &stmt.methods {
-            let is_initializer = &*method.name.lexeme == "init";
+            let is_initializer = method.name.lexeme == "init";
             let function =
                 LoxFunction::new(method.clone(), self.environment.clone(), is_initializer);
             methods.insert(method.name.lexeme, function);

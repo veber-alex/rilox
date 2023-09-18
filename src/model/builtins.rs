@@ -2,7 +2,6 @@ use super::callable::BuiltinFn;
 use crate::interpreter::{ControlFlow, Interpreter};
 use crate::model::object::LoxObject;
 use crate::resolver::Resolver;
-use std::array;
 use std::fmt::Display;
 use std::time::SystemTime;
 
@@ -38,7 +37,7 @@ pub fn install_builtins(interpreter: &mut Interpreter<'_>, resolver: &mut Resolv
     let clock: &'static dyn BuiltinFn = &Clock;
 
     let builtins = [clock];
-    for obj in array::IntoIter::new(builtins) {
+    for obj in builtins {
         resolver.scopes[0].insert(obj.name(), true);
         interpreter
             .environment

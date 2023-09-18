@@ -34,7 +34,7 @@ impl LoxInstance {
 
     pub fn get(&self, token: &Token, owner: &mut ACellOwner) -> Result<LoxObject, ControlFlow> {
         // property from instance
-        if let Some(obj) = owner.ro(&self.fields).get(&*token.lexeme).cloned() {
+        if let Some(obj) = owner.ro(&self.fields).get(token.lexeme).cloned() {
             return Ok(obj);
         }
 
